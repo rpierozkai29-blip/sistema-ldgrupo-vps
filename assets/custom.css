@@ -1,0 +1,103 @@
+/* ==========================================================================
+   ESTILO FINAL: ZOOM GENERAL & PANTALLA COMPLETA
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+/* 1. ESTRUCTURA GLOBAL Y ZOOM */
+html, body, [class*="css"] {
+    font-family: 'Outfit', sans-serif;
+    background-color: #F8F9FC;
+    color: #2D3436;
+}
+
+/* AQUÍ ESTÁ EL TRUCO: Aumentamos la escala de toda la app */
+.main .block-container {
+    max-width: 100% !important; /* Usar todo el ancho disponible */
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    padding-top: 1rem !important;
+    zoom: 115%; /* <--- ESTO AGRANDA TODO UN 15% */
+}
+
+/* 2. BARRA LATERAL (Sidebar) */
+[data-testid="stSidebar"] {
+    background-color: #FFFFFF;
+    border-right: 1px solid #F0F2F5;
+    zoom: 110%; /* Zoom también al menú */
+}
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    color: #6C5CE7;
+}
+
+/* 3. INPUTS Y SELECTORES (Más robustos) */
+.stTextInput input, .stDateInput input, .stSelectbox div[data-baseweb="select"] {
+    min-height: 45px !important;
+    border-radius: 8px !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #DFE6E9 !important;
+}
+
+/* 4. BOTONES */
+div.stButton > button {
+    min-height: 45px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    border: none !important;
+}
+div.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #6C5CE7 0%, #a29bfe 100%) !important;
+    color: white !important;
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3) !important;
+}
+
+/* 5. TARJETAS KPI */
+[data-testid="stMetric"] {
+    background-color: #FFFFFF !important;
+    padding: 15px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.03) !important;
+    border: 1px solid #F1F2F6 !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 32px !important; /* Forzamos tamaño grande */
+    font-weight: 700 !important;
+}
+
+/* 6. TABLAS */
+[data-testid="stDataEditor"], [data-testid="stDataFrame"] {
+    border-radius: 10px !important;
+    border: 1px solid #E2E8F0 !important;
+    background-color: white !important;
+}
+[data-testid="stDataEditor"] div[role="columnheader"] {
+    background-color: #F1F2F6 !important;
+    color: #2D3436 !important;
+    font-weight: 700 !important;
+    font-size: 15px !important;
+}
+
+/* 7. TARJETAS DE REPORTES (BI) */
+.report-card {
+    background-color: #FFFFFF;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    border: 1px solid #F1F2F6;
+    margin-bottom: 15px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+.report-card:hover { transform: translateY(-3px); }
+.report-card::before {
+    content: ""; position: absolute; left: 0; top: 0; height: 100%; width: 6px;
+    background: linear-gradient(180deg, #6C5CE7 0%, #a29bfe 100%);
+}
+.card-title { font-size: 13px; font-weight: 600; color: #A0AEC0; text-transform: uppercase; }
+.card-value { font-size: 28px; font-weight: 700; color: #2D3436; }
+
+/* 8. ELIMINAR ESPACIO SUPERIOR EXCESIVO */
+.block-container {
+    padding-top: 1rem !important;
+    margin-top: 0 !important;
+}
