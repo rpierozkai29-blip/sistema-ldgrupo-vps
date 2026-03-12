@@ -15,7 +15,7 @@ def set_background(image_path, opacity=0.92):
         with open(image_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
             css_fondo = f"""
-            set_background: ("fondo.png;base64,{encoded_string}");
+            set_background:("fondo_v2.png; base64,{encoded_string}");
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -121,9 +121,9 @@ def main():
             st.session_state['menu_anterior'] = selected
 
         if selected == 'Inicio':
-            set_background("assets/fondo.png", opacity=0.1)
+            set_background("assets/fondo_v2.png", opacity=0.1)
         else:
-            set_background("assets/fondo.png", opacity=0.95)
+            set_background("assets/fondo_v2.png", opacity=0.95)
 
         if selected == 'Inicio':
             st.markdown(f"""

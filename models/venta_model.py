@@ -50,6 +50,9 @@ class VentaModel:
     @staticmethod
     def get_tipos_venta(): return ["DEL_DIA", "SEGUIMIENTO", "RECOMPRA"]
 
+    @staticmethod
+    def get_origen_venta(): return ["Facebook", "Instagram", "Whatsapp", "", ""]
+
     @classmethod
     def get_usuarios_vendedores(cls): 
         conn = Database.get_connection()
