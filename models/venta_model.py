@@ -468,6 +468,7 @@ class VentaModel:
     @classmethod
     def get_detalle_ventas_completo(cls, f_ini, f_fin):
         conn = Database.get_connection()
+        if not conn: return []  # <-- Escudo protector 1
         try:
             cur = conn.cursor(dictionary=True)
             sql = """
@@ -492,12 +493,16 @@ class VentaModel:
             """
             cur.execute(sql, (f_ini, f_fin))
             return cur.fetchall()
-        except: return []
-        finally: conn.close()
+        except Exception as e: 
+            print(f"Error en Detalle Ventas: {e}")
+            return []
+        finally: 
+            if conn: conn.close()  # <-- Escudo protector 2
 
     @classmethod
     def get_reporte_deudas_detallado(cls, f_ini, f_fin):
         conn = Database.get_connection()
+        if not conn: return []  # <-- Escudo protector 1
         try:
             cur = conn.cursor(dictionary=True)
             sql = """
@@ -514,5 +519,8 @@ class VentaModel:
             """
             cur.execute(sql, (f_ini, f_fin))
             return cur.fetchall()
-        except: return []
-        finally: conn.close()
+        except Exception as e: 
+            print(f"Error en Deudas: {e}")
+            return []
+        finally: 
+            if conn: conn.close()  # <-- Escudo protector 2
