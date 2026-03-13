@@ -74,10 +74,9 @@ def main():
             ]))
 
             # --- CENTRO DE REPORTES (PARA TODOS, PERO DINÁMICO) ---
-            # El reporte diario lo ven todos
             reportes_subs = [sac.MenuItem('Reporte Diario', icon='calendar-check')] 
             
-            # Los reportes avanzados solo los ven los roles gerenciales
+            # Roles gerenciales ven todo
             if rol_usuario in ['admin', 'auditor', 'coordinador']:
                 reportes_subs.extend([
                     sac.MenuItem('Detalle General Ventas', icon='table'),
@@ -85,19 +84,23 @@ def main():
                     sac.MenuItem('Lista de Participantes', icon='people'),
                     sac.MenuItem('Historial de Cliente', icon='person-badge')
                 ])
+            # Vendedores solo ven Cuentas por Cobrar además del Reporte Diario
+            elif rol_usuario == 'vendedor':
+                reportes_subs.append(sac.MenuItem('Cuentas por Cobrar', icon='exclamation-circle'))
+                
             menu_items.append(sac.MenuItem('Centro de Reportes', icon='file-earmark-spreadsheet', children=reportes_subs))
 
             # --- MANTENIMIENTO ---
             if rol_usuario == 'admin':
                 menu_items.append(sac.MenuItem('Mantenimiento', icon='gear', children=[
-                    sac.MenuItem('Registro de Evento', icon='calendar-plus'),
+                    sac.MenuItem('Agenda de Cursos', icon='calendar-plus'),
                     sac.MenuItem('Registro de Usuario', icon='person-plus'),
                     sac.MenuItem('Registro de Cursos', icon='book'),      
                     sac.MenuItem('Registro de Periodos', icon='clock'),   
                 ]))
             elif rol_usuario == 'coordinador':
                 menu_items.append(sac.MenuItem('Mantenimiento', icon='gear', children=[
-                    sac.MenuItem('Registro de Evento', icon='calendar-plus'),
+                    sac.MenuItem('Agenda de Cursos', icon='calendar-plus'),
                     sac.MenuItem('Registro de Cursos', icon='book'),      
                     sac.MenuItem('Registro de Periodos', icon='clock'),
                     sac.MenuItem('Mi Perfil', icon='person-badge'), 
@@ -121,7 +124,6 @@ def main():
             st.session_state['menu_anterior'] = selected
 
         if selected == 'Inicio':
-            # Asegúrate de que la imagen 'fondo_v2.png' esté dentro de la carpeta 'assets'
             set_background("assets/fondo_v2.png", opacity=0.1)
         else:
             set_background("assets/fondo_v2.png", opacity=0.95)
@@ -144,19 +146,19 @@ def main():
             
         # --- RUTEADOR DEL CENTRO DE REPORTES ---
         elif selected == 'Reporte Diario':
-            reporte_diario_view.show_reporte_diario() # Acceso para todos
+            reporte_diario_view.show_reporte_diario()
             
-        elif selected in ['Detalle General Ventas', 'Cuentas por Cobrar', 'Lista de Participantes', 'Historial de Cliente']:
+        elif selected in ['Detalle General Ventas', 'Lista de Participantes', 'Historial de Cliente']:
             if rol_usuario in ['admin', 'auditor', 'coordinador']:
                 reportes_view.show_reportes(selected)
             else: st.error("Acceso denegado.")
             
-        elif selected in ['Cuentas por Cobrar']:
+        elif selected == 'Cuentas por Cobrar':
             if rol_usuario in ['admin', 'auditor', 'coordinador', 'vendedor']:
                 reportes_view.show_reportes(selected)
             else: st.error('Acceso denegado')
 
-        elif selected in ['Registro de Evento', 'Registro de Cursos', 'Registro de Periodos']:
+        elif selected in ['Agenda de Cursos', 'Registro de Cursos', 'Registro de Periodos']:
             if rol_usuario in ['admin', 'coordinador']:
                 mantenimiento_view.show_mantenimiento(selected)
             else: st.error("Acceso denegado. Solo Administradores o Coordinadores.")

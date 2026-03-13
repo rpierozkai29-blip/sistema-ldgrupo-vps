@@ -1,12 +1,25 @@
 /* ==========================================================================
-   ESTILO FINAL: ZOOM GENERAL & PANTALLA COMPLETA
+   ESTILO FINAL: ZOOM GENERAL & PANTALLA COMPLETA CON IMAGEN
    ========================================================================== */
-@import url('https://elpolitico.com/wp-content/uploads/2021/03/tecnolog%C3%ADa-digital2.png');
 
-/* 1. ESTRUCTURA GLOBAL Y ZOOM */
+/* 1. FONDO DE PANTALLA (La imagen que agregaste) */
+.stApp {
+    background-image: url('https://elpolitico.com/wp-content/uploads/2021/03/tecnolog%C3%ADa-digital2.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+}
+
+/* Para que el texto se lea bien sobre la imagen, le damos un fondo semitransparente al bloque central */
+[data-testid="stMainBlockContainer"] {
+    background-color: rgba(255, 255, 255, 0.92) !important;
+    border-radius: 15px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+/* 2. ESTRUCTURA GLOBAL Y ZOOM */
 html, body, [class*="css"] {
     font-family: 'Outfit', sans-serif;
-    background-color: #F8F9FC;
     color: #2D3436;
 }
 
@@ -19,9 +32,9 @@ html, body, [class*="css"] {
     zoom: 115%; /* <--- ESTO AGRANDA TODO UN 15% */
 }
 
-/* 2. BARRA LATERAL (Sidebar) */
+/* 3. BARRA LATERAL (Sidebar) */
 [data-testid="stSidebar"] {
-    background-color: #FFFFFF;
+    background-color: rgba(255, 255, 255, 0.95) !important; /* Ligeramente transparente */
     border-right: 1px solid #F0F2F5;
     zoom: 110%; /* Zoom también al menú */
 }
@@ -29,7 +42,7 @@ html, body, [class*="css"] {
     color: #6C5CE7;
 }
 
-/* 3. INPUTS Y SELECTORES (Más robustos) */
+/* 4. INPUTS Y SELECTORES (Más robustos) */
 .stTextInput input, .stDateInput input, .stSelectbox div[data-baseweb="select"] {
     min-height: 45px !important;
     border-radius: 8px !important;
@@ -37,7 +50,7 @@ html, body, [class*="css"] {
     border: 1px solid #DFE6E9 !important;
 }
 
-/* 4. BOTONES */
+/* 5. BOTONES */
 div.stButton > button {
     min-height: 45px !important;
     font-weight: 600 !important;
@@ -50,7 +63,7 @@ div.stButton > button[kind="primary"] {
     box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3) !important;
 }
 
-/* 5. TARJETAS KPI */
+/* 6. TARJETAS KPI */
 [data-testid="stMetric"] {
     background-color: #FFFFFF !important;
     padding: 15px !important;
@@ -63,7 +76,7 @@ div.stButton > button[kind="primary"] {
     font-weight: 700 !important;
 }
 
-/* 6. TABLAS */
+/* 7. TABLAS */
 [data-testid="stDataEditor"], [data-testid="stDataFrame"] {
     border-radius: 10px !important;
     border: 1px solid #E2E8F0 !important;
@@ -76,7 +89,7 @@ div.stButton > button[kind="primary"] {
     font-size: 15px !important;
 }
 
-/* 7. TARJETAS DE REPORTES (BI) */
+/* 8. TARJETAS DE REPORTES (BI) */
 .report-card {
     background-color: #FFFFFF;
     border-radius: 12px;
@@ -96,7 +109,7 @@ div.stButton > button[kind="primary"] {
 .card-title { font-size: 13px; font-weight: 600; color: #A0AEC0; text-transform: uppercase; }
 .card-value { font-size: 28px; font-weight: 700; color: #2D3436; }
 
-/* 8. ELIMINAR ESPACIO SUPERIOR EXCESIVO */
+/* 9. ELIMINAR ESPACIO SUPERIOR EXCESIVO */
 .block-container {
     padding-top: 1rem !important;
     margin-top: 0 !important;
