@@ -11,9 +11,9 @@ def get_db_connection():
     try:
         connection = mysql.connector.connect(
             host='localhost',
-            user='EscuelaEDP',
+            user='EscuelaLD',
             password='Escuela-Parrillera1',
-            database='db_edp_ld'
+            database='ld'
         )
         return connection
     except Error as e:
@@ -25,9 +25,9 @@ class Database:
     # Si usas .env, cámbialo aquí, pero esto funcionará ya mismo.
     _db_config = {
         'host': 'localhost',
-        'user': 'EscuelaEDP',
+        'user': 'EscuelaLD',
         'password': 'Escuela-Parrillera1',
-        'database': 'db_edp_ld'
+        'database': 'ld'
     }
 
     @classmethod

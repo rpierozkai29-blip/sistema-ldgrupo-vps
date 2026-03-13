@@ -15,7 +15,7 @@ def set_background(image_path, opacity=0.92):
         with open(image_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
             css_fondo = f"""
-            set_background:("fondo_v2.png; base64,{encoded_string}");
+            background-image: url("data:image/png;base64,{encoded_string}");
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -31,7 +31,7 @@ def set_background(image_path, opacity=0.92):
             padding-top: 2rem; padding-bottom: 2rem; margin-top: 1rem;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             max-width: 1150px !important; 
-            margin: 0 auto;               
+            margin: 0 auto;                
         }}
         [data-testid="stHeader"] {{ background: rgba(0,0,0,0); }}
         section[data-testid="stSidebar"] {{
@@ -121,6 +121,7 @@ def main():
             st.session_state['menu_anterior'] = selected
 
         if selected == 'Inicio':
+            # Asegúrate de que la imagen 'fondo_v2.png' esté dentro de la carpeta 'assets'
             set_background("assets/fondo_v2.png", opacity=0.1)
         else:
             set_background("assets/fondo_v2.png", opacity=0.95)
@@ -128,7 +129,7 @@ def main():
         if selected == 'Inicio':
             st.markdown(f"""
                 <div style='text-align: center; margin-top: 15%;'>
-                    <h1 style='color: #1f2937; text-shadow: 2px 2px 5px rgba(255,255,255,0.8); font-size: 3.5rem;'>¡Bienvenido al Sistema EDP!</h1>
+                    <h1 style='color: #1f2937; text-shadow: 2px 2px 5px rgba(255,255,255,0.8); font-size: 3.5rem;'>¡Bienvenido al Sistema LD!</h1>
                     <h3 style='color: #d32f2f; text-shadow: 1px 1px 3px rgba(255,255,255,0.9);'>Has iniciado sesión como {usuario_nombre}</h3>
                 </div>
             """, unsafe_allow_html=True)
@@ -150,6 +151,11 @@ def main():
                 reportes_view.show_reportes(selected)
             else: st.error("Acceso denegado.")
             
+        elif selected in ['Cuentas por Cobrar']:
+            if rol_usuario in ['admin', 'auditor', 'coordinador', 'vendedor']:
+                reportes_view.show_reportes(selected)
+            else: st.error('Acceso denegado')
+
         elif selected in ['Registro de Evento', 'Registro de Cursos', 'Registro de Periodos']:
             if rol_usuario in ['admin', 'coordinador']:
                 mantenimiento_view.show_mantenimiento(selected)
