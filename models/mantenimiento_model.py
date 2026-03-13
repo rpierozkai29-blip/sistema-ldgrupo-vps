@@ -176,12 +176,16 @@ class MantenimientoModel:
     @classmethod
     def get_eventos(cls):
         conn = Database.get_connection()
+        if not conn: return []
         try:
             cur = conn.cursor(dictionary=True)
+            # Reemplazamos 'e.stock_vendido' por un conteo dinámico en tiempo real que ignora los anulados
             sql = """
                 SELECT e.id, e.nombre_evento, DATE(e.fecha_evento) as fecha, 
                        c.nombre as curso, t.nombre as turno, s.nombre as sede, p.nombre as periodo,
-                       e.stock_maximo as aforo, e.stock_vendido as inscritos, e.estado
+                       e.stock_maximo as aforo, 
+                       (SELECT COUNT(dv.id) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id WHERE dv.evento_id = e.id AND v.estado != 'ANULADO') as inscritos, 
+                       e.estado
                 FROM eventos e
                 LEFT JOIN cursos c ON e.curso_id = c.id
                 LEFT JOIN turnos t ON e.turno_id = t.id
@@ -191,7 +195,9 @@ class MantenimientoModel:
             """
             cur.execute(sql)
             return cur.fetchall()
-        except: return []
+        except Exception as e: 
+            print(f"Error en get_eventos: {e}")
+            return []
         finally: 
             if conn: conn.close()
 
