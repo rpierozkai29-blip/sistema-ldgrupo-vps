@@ -611,7 +611,8 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                     conn.close()
                                 except: st.error("Error al registrar el cliente en BD"); st.stop()
                                 
-                                estado_calculado = 'PAGADO' if saldo_calc == 0 else 'PARCIAL'
+                                # 🚨 NUEVO FLUJO: Toda venta nace obligatoriamente como PENDIENTE de validación
+                                estado_calculado = 'PENDIENTE'
                                 ok, msg = VentaModel.registrar_venta_completa(id_cliente, id_usuario_final, total_calc, saldo_calc, estado_calculado, tipo_input, items_venta, acuenta_input, cuenta_input, op_input, obs_input, fecha_v_input, dscto_input)
                                 if ok: 
                                     st.success("✅ ¡Venta Registrada!")

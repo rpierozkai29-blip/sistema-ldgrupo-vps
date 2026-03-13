@@ -134,11 +134,11 @@ class MantenimientoModel:
             if conn: conn.close()
             
     @classmethod
-    def get_lista_sedes(cls):
+    def get_lista_modalidad(cls):
         conn = Database.get_connection()
         try:
             cur = conn.cursor(dictionary=True)
-            cur.execute("SELECT id, nombre FROM sedes ORDER BY nombre ASC")
+            cur.execute("SELECT id, nombre FROM modalidad ORDER BY nombre ASC")
             return cur.fetchall()
         except: return []
         finally: 
@@ -160,12 +160,13 @@ class MantenimientoModel:
     # --- CRUD DE EVENTOS ---
     # ==========================================
     @classmethod
-    def crear_evento(cls, nombre_evento, fecha, curso_id, turno_id, sede_id, periodo_id, stock_maximo, estado="ABIERTO"):
+    def crear_evento(cls, nombre_evento, fecha, curso_id, turno_id, modalidad_id, periodo_id, stock_maximo, estado="ABIERTO"):
         conn = Database.get_connection()
         try:
             cur = conn.cursor()
+            # 👇 AQUI: Guardamos en la columna original 'sede_id'
             sql = "INSERT INTO eventos (nombre_evento, fecha_evento, curso_id, turno_id, sede_id, periodo_id, stock_maximo, stock_vendido, estado) VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s)"
-            cur.execute(sql, (nombre_evento, fecha, curso_id, turno_id, sede_id, periodo_id, stock_maximo, estado))
+            cur.execute(sql, (nombre_evento, fecha, curso_id, turno_id, modalidad_id, periodo_id, stock_maximo, estado))
             conn.commit()
             return True, "Evento creado exitosamente."
         except Exception as e:
@@ -179,17 +180,17 @@ class MantenimientoModel:
         if not conn: return []
         try:
             cur = conn.cursor(dictionary=True)
-            # Reemplazamos 'e.stock_vendido' por un conteo dinámico en tiempo real que ignora los anulados
+            # 👇 AQUI: Hacemos el cruce usando 'e.sede_id'
             sql = """
                 SELECT e.id, e.nombre_evento, DATE(e.fecha_evento) as fecha, 
-                       c.nombre as curso, t.nombre as turno, s.nombre as sede, p.nombre as periodo,
+                       c.nombre as curso, t.nombre as turno, m.nombre as modalidad, p.nombre as periodo,
                        e.stock_maximo as aforo, 
                        (SELECT COUNT(dv.id) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id WHERE dv.evento_id = e.id AND v.estado != 'ANULADO') as inscritos, 
                        e.estado
                 FROM eventos e
                 LEFT JOIN cursos c ON e.curso_id = c.id
                 LEFT JOIN turnos t ON e.turno_id = t.id
-                LEFT JOIN sedes s ON e.sede_id = s.id
+                LEFT JOIN modalidad m ON e.sede_id = m.id
                 LEFT JOIN periodos p ON e.periodo_id = p.id
                 ORDER BY e.fecha_evento DESC
             """
@@ -202,12 +203,13 @@ class MantenimientoModel:
             if conn: conn.close()
 
     @classmethod
-    def actualizar_evento(cls, id_evento, nombre_evento, fecha, curso_id, turno_id, sede_id, periodo_id, stock_maximo, estado):
+    def actualizar_evento(cls, id_evento, nombre_evento, fecha, curso_id, turno_id, modalidad_id, periodo_id, stock_maximo, estado):
         conn = Database.get_connection()
         try:
             cur = conn.cursor()
+            # 👇 AQUI: Actualizamos usando la columna original 'sede_id'
             sql = "UPDATE eventos SET nombre_evento=%s, fecha_evento=%s, curso_id=%s, turno_id=%s, sede_id=%s, periodo_id=%s, stock_maximo=%s, estado=%s WHERE id=%s"
-            cur.execute(sql, (nombre_evento, fecha, curso_id, turno_id, sede_id, periodo_id, stock_maximo, estado, id_evento))
+            cur.execute(sql, (nombre_evento, fecha, curso_id, turno_id, modalidad_id, periodo_id, stock_maximo, estado, id_evento))
             conn.commit()
             return True, "Evento actualizado correctamente."
         except Exception as e:

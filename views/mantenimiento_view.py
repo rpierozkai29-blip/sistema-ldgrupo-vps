@@ -34,7 +34,7 @@ def editar_usuario_dialog(user_data):
                 else: st.error(msg)
 
 @st.dialog("✏️ Editar / Cerrar Evento", width="large")
-def editar_evento_dialog(evt_data, cursos_dict, turnos_dict, sedes_dict, periodos_dict):
+def editar_evento_dialog(evt_data, cursos_dict, turnos_dict, modalidad_dict, periodos_dict):
     st.write(f"Modificando evento: **{evt_data['Evento']}**")
     with st.form("form_editar_evento"):
         c1, c2, c3 = st.columns([2, 3, 2])
@@ -54,9 +54,9 @@ def editar_evento_dialog(evt_data, cursos_dict, turnos_dict, sedes_dict, periodo
         idx_turno = lista_turnos.index(evt_data['Turno']) if evt_data['Turno'] in lista_turnos else 0
         n_turno = c4.selectbox("Turno", lista_turnos, index=idx_turno)
         
-        lista_sedes = list(sedes_dict.keys())
-        idx_sede = lista_sedes.index(evt_data['Modalidad']) if evt_data.get('Modalidad') in lista_sedes else 0
-        n_sede = c5.selectbox("Modalidad", lista_sedes, index=idx_sede)
+        lista_modalidades = list(modalidad_dict.keys())
+        idx_mod = lista_modalidades.index(evt_data['Modalidad']) if evt_data.get('Modalidad') in lista_modalidades else 0
+        n_modalidad = c5.selectbox("Modalidad", lista_modalidades, index=idx_mod)
         
         lista_periodos = list(periodos_dict.keys())
         idx_periodo = lista_periodos.index(evt_data['Periodo']) if evt_data.get('Periodo') in lista_periodos else 0
@@ -74,7 +74,7 @@ def editar_evento_dialog(evt_data, cursos_dict, turnos_dict, sedes_dict, periodo
                 ok, msg = MantenimientoModel.actualizar_evento(
                     int(evt_data['ID']), n_nombre, n_fecha, 
                     int(cursos_dict.get(n_curso)), int(turnos_dict.get(n_turno)), 
-                    int(sedes_dict.get(n_sede)), int(periodos_dict.get(n_periodo) or 0), 
+                    int(modalidad_dict.get(n_modalidad)), int(periodos_dict.get(n_periodo) or 0), 
                     n_cupos, n_estado
                 )
                 if ok: st.success(msg); st.rerun()
@@ -182,11 +182,11 @@ def show_mantenimiento(sub_menu):
 
     elif sub_menu == 'Agenda de Cursos':
         cursos = MantenimientoModel.get_lista_cursos(); turnos = MantenimientoModel.get_lista_turnos() 
-        sedes = MantenimientoModel.get_lista_sedes(); periodos = MantenimientoModel.get_lista_periodos()
+        modalidades = MantenimientoModel.get_lista_modalidad(); periodos = MantenimientoModel.get_lista_periodos()
         
         curso_dict = {c['nombre']: c['id'] for c in cursos} if cursos else {}
         turno_dict = {t['nombre']: t['id'] for t in turnos} if turnos else {}
-        sede_dict = {s['nombre']: s['id'] for s in sedes} if sedes else {}
+        modalidad_dict = {m['nombre']: m['id'] for m in modalidades} if modalidades else {}
         periodo_dict = {p['nombre']: p['id'] for p in periodos} if periodos else {}
 
         with st.expander("➕ Crear Nuevo Evento", expanded=False):
@@ -198,7 +198,7 @@ def show_mantenimiento(sub_menu):
             
             c4, c5, c6, c7 = st.columns(4)
             nom_turno = c4.selectbox("Turno", list(turno_dict.keys()) if turnos else [], index=None, placeholder="Turno...")
-            nom_sede = c5.selectbox("Sede", list(sede_dict.keys()) if sedes else [], index=None, placeholder="Sede...")
+            nom_modalidad = c5.selectbox("Modalidad", list(modalidad_dict.keys()) if modalidades else [], index=None, placeholder="Modalidad...")
             nom_periodo = c6.selectbox("Campaña/Periodo", list(periodo_dict.keys()) if periodos else [], index=None, placeholder="Periodo...")
             estado = c7.selectbox("Estado", ["ABIERTO", "CERRADO", "LLENO"], index=None, placeholder="Estado...")
             
@@ -206,12 +206,12 @@ def show_mantenimiento(sub_menu):
 
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("📅 Crear Evento", use_container_width=True, type="primary"):
-                if not nom_curso or not nom_turno or not nom_sede or not nom_periodo or not estado or not nombre_evento: 
+                if not nom_curso or not nom_turno or not nom_modalidad or not nom_periodo or not estado or not nombre_evento: 
                     st.error("⚠️ Faltan datos obligatorios (No olvides elegir el periodo).")
                 else:
                     success, msg = MantenimientoModel.crear_evento(
                         nombre_evento, fecha, curso_dict.get(nom_curso), 
-                        turno_dict.get(nom_turno), sede_dict.get(nom_sede), 
+                        turno_dict.get(nom_turno), modalidad_dict.get(nom_modalidad), 
                         periodo_dict.get(nom_periodo), cupos_max, estado
                     )
                     if success: st.success(msg); st.rerun()
@@ -222,7 +222,7 @@ def show_mantenimiento(sub_menu):
         eventos_data = MantenimientoModel.get_eventos()
         if eventos_data:
             df_evt = pd.DataFrame(eventos_data)
-            df_evt.rename(columns={'id':'ID', 'nombre_evento':'Evento', 'fecha':'Fecha', 'curso':'Curso', 'turno':'Turno', 'sede':'Sede', 'periodo':'Periodo', 'aforo':'Aforo', 'inscritos': 'Inscritos', 'estado':'Estado'}, inplace=True)
+            df_evt.rename(columns={'id':'ID', 'nombre_evento':'Evento', 'fecha':'Fecha', 'curso':'Curso', 'turno':'Turno', 'modalidad':'Modalidad', 'periodo':'Periodo', 'aforo':'Aforo', 'inscritos': 'Inscritos', 'estado':'Estado'}, inplace=True)
             df_evt['Fecha'] = pd.to_datetime(df_evt['Fecha'])
             
             df_evt['Mes_Año'] = df_evt['Fecha'].dt.strftime('%m/%Y')
@@ -248,7 +248,7 @@ def show_mantenimiento(sub_menu):
             
             df_evt['Fecha'] = df_evt['Fecha'].dt.strftime('%d/%m/%Y')
             
-            cols_show = ['ID', 'Fecha', 'Evento', 'Periodo', 'Curso', 'Turno', 'Sede', 'Inscritos', 'Aforo', 'Estado']
+            cols_show = ['ID', 'Fecha', 'Evento', 'Periodo', 'Curso', 'Turno', 'Modalidad', 'Inscritos', 'Aforo', 'Estado']
             
             # Agregamos altura (height=500) para ver más registros de golpe
             event = st.dataframe(df_evt[cols_show], use_container_width=True, height=500, hide_index=True, selection_mode="single-row", on_select="rerun")
@@ -256,7 +256,7 @@ def show_mantenimiento(sub_menu):
             if len(event.selection.rows) > 0:
                 idx = event.selection.rows[0]; sel = df_evt.iloc[idx]
                 c_btn1, c_btn2, _ = st.columns([1, 1, 3])
-                if c_btn1.button("✏️ Editar", use_container_width=True): editar_evento_dialog(sel, curso_dict, turno_dict, sede_dict, periodo_dict)
+                if c_btn1.button("✏️ Editar", use_container_width=True): editar_evento_dialog(sel, curso_dict, turno_dict, modalidad_dict, periodo_dict)
                 if c_btn2.button("🗑️ Eliminar", type="primary", use_container_width=True):
                     ok, msg = MantenimientoModel.eliminar_evento(int(sel['ID']))
                     if ok: st.success(msg); st.rerun()
