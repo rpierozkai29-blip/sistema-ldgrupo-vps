@@ -113,12 +113,11 @@ class VentaModel:
         if conn:
             try:
                 cur = conn.cursor()
-                # 1. Consulta de Eventos (Corregida para evitar conflicto DISTINCT vs ORDER BY)
+                # 1. Consulta Universal a prueba de errores
                 cur.execute("""
-                    SELECT CONCAT(nombre_evento, ' [', DATE_FORMAT(fecha_evento, '%d/%m'), ']') 
+                    SELECT DISTINCT CONCAT(nombre_evento, ' [', DATE_FORMAT(fecha_evento, '%d/%m'), ']') as nombre_completo
                     FROM eventos 
-                    GROUP BY nombre_evento, fecha_evento 
-                    ORDER BY fecha_evento DESC
+                    ORDER BY nombre_completo DESC
                 """)
                 res_ev = cur.fetchall()
                 if res_ev:
