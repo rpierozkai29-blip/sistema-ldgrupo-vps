@@ -183,12 +183,16 @@ class VentaModel:
     # --- 3. OPERACIONES PRINCIPALES DE VENTA ---
     # ==========================================
     @classmethod
-    def registrar_venta_completa(cls, id_cliente, id_usuario, total, saldo, estado, tipo_venta, items_venta, monto_pago, metodo_pago, operacion, observacion, fecha_venta, descuento):
+    def registrar_venta_completa(cls, id_cliente, id_usuario, total, saldo, estado, tipo_venta, items_venta, monto_pago, metodo_pago, operacion, observacion, fecha_venta, descuento, fecha_registro):
         conn = Database.get_connection()
         try:
             cur = conn.cursor()
-            sql_v = "INSERT INTO ventas (cliente_id, usuario_id, total, descuento, saldo_pendiente, estado, tipo_venta, observacion, fecha_venta, fecha_registro) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())"
-            cur.execute(sql_v, (id_cliente, id_usuario, total, descuento, saldo, estado, tipo_venta, observacion, fecha_venta))
+            
+            # 🚨 MODIFICACIÓN: Siempre nace como PARCIAL hasta que el auditor valide el dinero
+            estado_inicial = "PARCIAL" 
+            
+            sql_v = "INSERT INTO ventas (cliente_id, usuario_id, total, descuento, saldo_pendiente, estado, tipo_venta, observacion, fecha_venta, fecha_registro) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            cur.execute(sql_v, (id_cliente, id_usuario, total, descuento, total, estado_inicial, tipo_venta, observacion, fecha_venta, fecha_registro))
             venta_id = cur.lastrowid
 
             sql_d = "INSERT INTO detalle_ventas (venta_id, evento_id, precio_unitario, subtotal) VALUES (%s, %s, %s, %s)"
@@ -196,6 +200,7 @@ class VentaModel:
                 cur.execute(sql_d, (venta_id, item['id'], item['precio_base'], item['subtotal']))
 
             if monto_pago > 0:
+                # 🚨 MODIFICACIÓN: El pago nace como PENDIENTE
                 sql_p = "INSERT INTO pagos (venta_id, monto, metodo_pago, nro_operacion, usuario_id, estado, fecha_pago) VALUES (%s, %s, %s, %s, %s, 'PENDIENTE', %s)"
                 cur.execute(sql_p, (venta_id, monto_pago, metodo_pago, operacion, id_usuario, fecha_venta))
 
@@ -211,7 +216,7 @@ class VentaModel:
                 cur.execute("UPDATE eventos SET estado = CASE WHEN stock_vendido >= stock_maximo AND stock_maximo > 0 THEN 'LLENO' ELSE 'ABIERTO' END WHERE id = %s", (item['id'],))
 
             conn.commit()
-            return True, "Venta multi-curso registrada con éxito."
+            return True, "Venta registrada con éxito. Enviada a validación."
         except Exception as e:
             if conn: conn.rollback()
             return False, f"Error BD: {e}"
@@ -227,8 +232,8 @@ class VentaModel:
             cur.execute("SELECT evento_id FROM detalle_ventas WHERE venta_id = %s", (id_venta,))
             eventos_viejos = [row[0] for row in cur.fetchall()]
 
-            sql_v = "UPDATE ventas SET total=%s, descuento=%s, observacion=%s, tipo_venta=%s, fecha_venta=%s WHERE id=%s"
-            cur.execute(sql_v, (d_ven['precio'], d_ven['descuento'], d_ven['obs'], d_ven['tipo_venta'], d_ven['fecha_venta'], id_venta))
+            sql_v = "UPDATE ventas SET total=%s, descuento=%s, observacion=%s, tipo_venta=%s, fecha_venta=%s, fecha_registro=%s WHERE id=%s"
+            cur.execute(sql_v, (d_ven['precio'], d_ven['descuento'], d_ven['obs'], d_ven['tipo_venta'], d_ven['fecha_venta'], d_ven['fecha_registro'], id_venta))
 
             cur.execute("DELETE FROM detalle_ventas WHERE venta_id = %s", (id_venta,))
             sql_d = "INSERT INTO detalle_ventas (venta_id, evento_id, precio_unitario, subtotal) VALUES (%s, %s, %s, %s)"
@@ -251,6 +256,10 @@ class VentaModel:
                 cur.execute("UPDATE eventos SET estado = CASE WHEN stock_vendido >= stock_maximo AND stock_maximo > 0 THEN 'LLENO' ELSE 'ABIERTO' END WHERE id = %s", (ev_id,))
 
             conn.commit()
+            
+            # Recalcular saldos y estado tras el update
+            cls.recalcular_saldos_venta(id_venta)
+            
             return True, "Venta actualizada correctamente."
         except Exception as e:
             if conn: conn.rollback()
@@ -345,26 +354,47 @@ class VentaModel:
             if not pago_info: raise Exception("Pago no encontrado.")
             venta_id = pago_info['venta_id']
             
-            cur.execute("SELECT SUM(monto) as total_validado FROM pagos WHERE venta_id = %s AND estado = 'PAGADO'", (venta_id,))
-            suma_validados = cur.fetchone()['total_validado'] or 0.0
-            total_validado = round(float(suma_validados), 2)
-            
-            cur.execute("SELECT total FROM ventas WHERE id = %s", (venta_id,))
-            venta_info = cur.fetchone()
-            total_venta = round(float(venta_info['total']), 2)
-            
-            nuevo_saldo = round(total_venta - total_validado, 2)
-            nuevo_estado = 'PAGADO' if nuevo_saldo <= 0.01 else 'PARCIAL'
-            
-            cur.execute("UPDATE ventas SET saldo_pendiente = %s, estado = %s WHERE id = %s", (nuevo_saldo, nuevo_estado, venta_id))
-            
             conn.commit()
+            
+            # Recalcular saldos al validar pago
+            cls.recalcular_saldos_venta(venta_id)
+            
             return True, "✅ Pago validado con éxito. El dinero ya ingresó a caja."
         except Exception as e:
             conn.rollback()
             return False, str(e)
         finally:
             conn.close()
+
+    @classmethod
+    def recalcular_saldos_venta(cls, venta_id):
+        """Función auxiliar para asegurar que el saldo de la venta sea siempre exacto"""
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor(dictionary=True)
+            
+            # Sumar todos los pagos VALIDADOS
+            cur.execute("SELECT SUM(monto) as total_validado FROM pagos WHERE venta_id = %s AND estado = 'PAGADO'", (venta_id,))
+            suma_validados = cur.fetchone()['total_validado'] or 0.0
+            total_validado = round(float(suma_validados), 2)
+            
+            # Obtener el total original de la venta
+            cur.execute("SELECT total FROM ventas WHERE id = %s", (venta_id,))
+            venta_info = cur.fetchone()
+            total_venta = round(float(venta_info['total']), 2)
+            
+            # Calcular el saldo
+            nuevo_saldo = round(total_venta - total_validado, 2)
+            
+            # Si el saldo es 0 (o menos), se marca como PAGADO. Si no, vuelve a PARCIAL.
+            nuevo_estado = 'PAGADO' if nuevo_saldo <= 0.01 else 'PARCIAL'
+            
+            cur.execute("UPDATE ventas SET saldo_pendiente = %s, estado = %s WHERE id = %s", (nuevo_saldo, nuevo_estado, venta_id))
+            conn.commit()
+        except:
+            if conn: conn.rollback()
+        finally:
+            if conn: conn.close()
 
 
     # ==========================================
