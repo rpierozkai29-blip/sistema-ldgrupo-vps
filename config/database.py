@@ -10,10 +10,10 @@ def get_db_connection():
     """Crea y devuelve conexión a la base de datos."""
     try:
         connection = mysql.connector.connect(
-            host='localhost',
-            user='EscuelaLD',
-            password='Escuela-Parrillera1',
-            database='ld'
+            host=os.getenv('DB_HOST'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASS'),
+            database=os.getenv('DB_NAME')
         )
         return connection
     except Error as e:
@@ -21,12 +21,12 @@ def get_db_connection():
         return None
 
 class Database:
-    # Configuración directa (basada en lo que tenías antes)
+
     # Si usas .env, cámbialo aquí, pero esto funcionará ya mismo.
     _db_config = {
         'host': 'localhost',
-        'user': 'EscuelaLD',
-        'password': 'Escuela-Parrillera1',
+        'user': 'root',
+        'password': '',
         'database': 'ld'
     }
 

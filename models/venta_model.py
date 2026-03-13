@@ -108,16 +108,32 @@ class VentaModel:
 
     @classmethod
     def get_lista_eventos_categorias(cls):
-        conn = Database.get_connection(); ev, ca = [], []
+        conn = Database.get_connection()
+        ev, ca = [], []
         if conn:
             try:
                 cur = conn.cursor()
-                cur.execute("SELECT DISTINCT CONCAT(nombre_evento, ' [', DATE_FORMAT(fecha_evento, '%d/%m'), ']') FROM eventos ORDER BY fecha_evento DESC")
-                ev = [x[0] for x in cur.fetchall()]
+                # 1. Consulta de Eventos (Corregida para evitar conflicto DISTINCT vs ORDER BY)
+                cur.execute("""
+                    SELECT CONCAT(nombre_evento, ' [', DATE_FORMAT(fecha_evento, '%d/%m'), ']') 
+                    FROM eventos 
+                    GROUP BY nombre_evento, fecha_evento 
+                    ORDER BY fecha_evento DESC
+                """)
+                res_ev = cur.fetchall()
+                if res_ev:
+                    ev = [x[0] for x in res_ev]
+                
+                # 2. Consulta de Categorías
                 cur.execute("SELECT DISTINCT nombre FROM categorias ORDER BY nombre ASC")
-                ca = [x[0] for x in cur.fetchall()]
-            except: pass
-            finally: conn.close()
+                res_ca = cur.fetchall()
+                if res_ca:
+                    ca = [x[0] for x in res_ca]
+                    
+            except Exception as e:
+                print(f"Error cargando combos de eventos/categorias: {e}")
+            finally: 
+                conn.close()
         return ev, ca
 
     @classmethod
