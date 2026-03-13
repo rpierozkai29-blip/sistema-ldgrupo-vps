@@ -363,8 +363,12 @@ def show_reportes(sub_menu):
         st.markdown('<div class="filter-container">', unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns(4)
         anio_sel = c2.selectbox("Año", [anio_actual - 1, anio_actual, anio_actual + 1], index=1, key="dash_anio")
-        periodos_mostrar = periodos_nombres_completos if anio_sel < anio_actual else periodos_nombres_completos[:mes_actual]
-        mes_sel = c1.selectbox("Periodo de Campaña", periodos_mostrar, index=len(periodos_mostrar)-1, key="dash_mes")
+        
+        # MOSTRAR SIEMPRE LOS 12 MESES
+        periodos_mostrar = periodos_nombres_completos
+        def_idx = mes_actual - 1 if anio_sel == anio_actual else 11
+        mes_sel = c1.selectbox("Periodo de Campaña", periodos_mostrar, index=def_idx, key="dash_mes")
+        
         mes_numero = periodos_nombres_completos.index(mes_sel) + 1
         mes_nombre_actual = mes_sel.split('-')[1].strip().lower()
         
@@ -410,8 +414,10 @@ def show_reportes(sub_menu):
             st.markdown('<div class="filter-container">', unsafe_allow_html=True)
             c1, c2 = st.columns(2)
             anio_sel = c2.selectbox("Año", [anio_actual - 1, anio_actual, anio_actual + 1], index=1, key="bi_anio")
-            periodos_mostrar = periodos_nombres_completos if anio_sel < anio_actual else periodos_nombres_completos[:mes_actual]
-            mes_sel = c1.selectbox("Periodo", periodos_mostrar, index=len(periodos_mostrar)-1, key="bi_mes")
+            
+            periodos_mostrar = periodos_nombres_completos
+            def_idx = mes_actual - 1 if anio_sel == anio_actual else 11
+            mes_sel = c1.selectbox("Periodo", periodos_mostrar, index=def_idx, key="bi_mes")
             st.markdown('</div>', unsafe_allow_html=True)
             
         mes_numero = periodos_nombres_completos.index(mes_sel) + 1
@@ -508,8 +514,10 @@ def show_reportes(sub_menu):
             st.markdown('<div class="filter-container">', unsafe_allow_html=True)
             c1, c2, c3, c4 = st.columns(4)
             anio_sel = c2.selectbox("Año", [anio_actual - 1, anio_actual, anio_actual + 1], index=1, key="det_anio")
-            periodos_mostrar = periodos_nombres_completos if anio_sel < anio_actual else periodos_nombres_completos[:mes_actual]
-            mes_sel = c1.selectbox("Periodo", periodos_mostrar, index=len(periodos_mostrar)-1, key="det_mes")
+            
+            periodos_mostrar = periodos_nombres_completos
+            def_idx = mes_actual - 1 if anio_sel == anio_actual else 11
+            mes_sel = c1.selectbox("Periodo", periodos_mostrar, index=def_idx, key="det_mes")
             
             evts, cats = VentaModel.get_lista_eventos_categorias()
             sel_evt = c3.multiselect("Eventos", evts, key="det_evt", placeholder="Filtrar Evento")
@@ -550,8 +558,10 @@ def show_reportes(sub_menu):
             st.markdown('<div class="filter-container">', unsafe_allow_html=True)
             c1, c2, c3, c4 = st.columns(4)
             anio_sel = c2.selectbox("Año", [anio_actual - 1, anio_actual, anio_actual + 1], index=1, key="cxc_anio")
-            periodos_mostrar = periodos_nombres_completos if anio_sel < anio_actual else periodos_nombres_completos[:mes_actual]
-            mes_sel = c1.selectbox("Periodo", periodos_mostrar, index=len(periodos_mostrar)-1, key="cxc_mes")
+            
+            periodos_mostrar = periodos_nombres_completos
+            def_idx = mes_actual - 1 if anio_sel == anio_actual else 11
+            mes_sel = c1.selectbox("Periodo", periodos_mostrar, index=def_idx, key="cxc_mes")
             
             evts, cats = VentaModel.get_lista_eventos_categorias()
             sel_evt = c3.multiselect("Eventos", evts, key="cxc_evt", placeholder="Filtrar Evento")
@@ -592,8 +602,10 @@ def show_reportes(sub_menu):
             st.markdown('<div class="filter-container">', unsafe_allow_html=True)
             c1, c2, c3 = st.columns([1, 1, 2])
             anio_sel = c2.selectbox("Año", [anio_actual - 1, anio_actual, anio_actual + 1], index=1, key="lst_anio")
-            periodos_mostrar = periodos_nombres_completos if anio_sel < anio_actual else periodos_nombres_completos[:mes_actual]
-            mes_sel = c1.selectbox("Periodo", periodos_mostrar, index=len(periodos_mostrar)-1, key="lst_mes")
+            
+            periodos_mostrar = periodos_nombres_completos
+            def_idx = mes_actual - 1 if anio_sel == anio_actual else 11
+            mes_sel = c1.selectbox("Periodo", periodos_mostrar, index=def_idx, key="lst_mes")
             
             evts, _ = VentaModel.get_lista_eventos_categorias()
             sel_evt = c3.selectbox("Seleccionar Evento (Obligatorio)", ["Seleccione un evento..."] + evts, key="lst_evt")

@@ -226,18 +226,32 @@ def show_mantenimiento(sub_menu):
             df_evt['Fecha'] = pd.to_datetime(df_evt['Fecha'])
             
             df_evt['Mes_Año'] = df_evt['Fecha'].dt.strftime('%m/%Y')
-            f_col1, f_col2, _ = st.columns([1, 1, 2])
-            filtro_mes = f_col1.selectbox("Filtrar por Mes", ["Todos"] + list(df_evt['Mes_Año'].unique()))
+            
+            # --- TRUCO: Generamos los 12 meses fijos del año para el filtro ---
+            año_actual = datetime.now().year
+            meses_fijos = [f"{str(m).zfill(2)}/{año_actual}" for m in range(1, 13)]
+            # Juntamos los fijos con los de la base de datos y los ordenamos
+            opciones_mes = sorted(list(set(meses_fijos + list(df_evt['Mes_Año'].unique()))))
+            
+            # Agregamos 3 columnas para que también puedas filtrar por "Periodo"
+            f_col1, f_col2, f_col3 = st.columns(3)
+            filtro_mes = f_col1.selectbox("Filtrar por Mes", ["Todos"] + opciones_mes)
             filtro_estado = f_col2.selectbox("Filtrar Estado", ["Todos", "ABIERTO", "LLENO", "CERRADO"])
             
+            opciones_periodos = ["Todos"] + list(df_evt['Periodo'].dropna().unique())
+            filtro_periodo = f_col3.selectbox("Filtrar por Periodo", opciones_periodos)
+            
+            # Aplicar filtros
             if filtro_mes != "Todos": df_evt = df_evt[df_evt['Mes_Año'] == filtro_mes]
             if filtro_estado != "Todos": df_evt = df_evt[df_evt['Estado'] == filtro_estado]
+            if filtro_periodo != "Todos": df_evt = df_evt[df_evt['Periodo'] == filtro_periodo]
             
             df_evt['Fecha'] = df_evt['Fecha'].dt.strftime('%d/%m/%Y')
             
             cols_show = ['ID', 'Fecha', 'Evento', 'Periodo', 'Curso', 'Turno', 'Sede', 'Inscritos', 'Aforo', 'Estado']
             
-            event = st.dataframe(df_evt[cols_show], use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun")
+            # Agregamos altura (height=500) para ver más registros de golpe
+            event = st.dataframe(df_evt[cols_show], use_container_width=True, height=500, hide_index=True, selection_mode="single-row", on_select="rerun")
             
             if len(event.selection.rows) > 0:
                 idx = event.selection.rows[0]; sel = df_evt.iloc[idx]
@@ -280,7 +294,7 @@ def show_mantenimiento(sub_menu):
             df_cur.rename(columns={'id':'ID', 'nombre':'Nombre', 'codigo_sku': 'SKU', 'precio_base':'Precio Base', 'categoria':'Categoria'}, inplace=True)
             cols_show = ['ID', 'SKU', 'Nombre', 'Categoria', 'Precio Base']
             
-            event = st.dataframe(df_cur[cols_show], use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun")
+            event = st.dataframe(df_cur[cols_show], use_container_width=True, height=500, hide_index=True, selection_mode="single-row", on_select="rerun")
             if len(event.selection.rows) > 0:
                 idx = event.selection.rows[0]; sel = df_cur.iloc[idx]
                 c_btn1, c_btn2, _ = st.columns([1, 1, 3])
@@ -326,7 +340,9 @@ def show_mantenimiento(sub_menu):
             df_per['Estado_Visual'] = df_per['Estado'].apply(lambda x: f"🟢 {x}" if x == 'ACTIVO' else f"🔴 {x}")
             
             cols_show = ['ID', 'Nombre', 'Inicio', 'Fin', 'Estado_Visual']
-            event = st.dataframe(df_per[cols_show], use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun")
+            
+            # Agregamos altura para mostrar los 12 meses de golpe sin que corte la tabla
+            event = st.dataframe(df_per[cols_show], use_container_width=True, height=500, hide_index=True, selection_mode="single-row", on_select="rerun")
             
             if len(event.selection.rows) > 0:
                 idx = event.selection.rows[0]; sel = df_per.iloc[idx]
