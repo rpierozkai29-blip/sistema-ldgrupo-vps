@@ -424,7 +424,7 @@ def show_ordenes(sub_menu="Registrar Venta"):
 
                 c_row1 = st.columns([1, 1.5, 1.5])
                 c_row1[0].text_input("ID Venta", value=f"{id_display}", disabled=True)
-                fecha_v_input = c_row1[1].date_input("📅 Fecha de Venta", value=st.session_state['form_data'].get("fecha_venta", fecha_actual.date()), help="Fecha en que se cerró la venta")
+                fecha_v_input = c_row1[1].date_input("📅 Fecha de Venta (Real)", value=st.session_state['form_data'].get("fecha_venta", fecha_actual.date()), help="Fecha en que se cerró la venta")
                 
                 # 🟢 MODIFICACIÓN AQUÍ: Habilitar la edición de la fecha de registro solo para administradores
                 es_admin = True if rol_actual == 'admin' else False
@@ -616,7 +616,6 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                     conn.close()
                                 except: st.error("Error al registrar el cliente en BD"); st.stop()
                                 
-                                # 🚨 NUEVO FLUJO: Toda venta nace obligatoriamente como PENDIENTE de validación (Se añade fecha_r_input al final)
                                 estado_calculado = 'PENDIENTE'
                                 ok, msg = VentaModel.registrar_venta_completa(id_cliente, id_usuario_final, total_calc, saldo_calc, estado_calculado, tipo_input, items_venta, acuenta_input, cuenta_input, op_input, obs_input, fecha_v_input, dscto_input, fecha_r_input)
                                 if ok: 
