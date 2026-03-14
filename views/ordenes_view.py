@@ -295,34 +295,35 @@ def show_ordenes(sub_menu="Registrar Venta"):
     usuario_actual = st.session_state.get('usuario', '')
     rol_actual = st.session_state.get('rol', '').lower()
 
+    # 🟢 MODIFICACIÓN: Filtro general unificado para que el Asesor aplique en todas las pestañas
     with st.expander("🔍 Filtros de Búsqueda", expanded=(sub_menu != "Registrar Venta")):
+        c1, c2, c3, c4 = st.columns(4)
+        f_ini = c1.date_input("Desde (F. Reg)", fecha_actual.date(), key=f"ini_{key_suffix}")
+        f_fin = c2.date_input("Hasta (F. Reg)", fecha_actual.date(), key=f"fin_{key_suffix}")
+        
+        # Lógica de bloqueo de vendedor si no es admin/coordinador/auditor
+        lista_filtro_asesores = ["Todos"] + lista_vendedores
+        idx_asesor_filtro = 0
+        disable_asesor_filtro = False
+        
+        if rol_actual not in ['admin', 'coordinador', 'auditor']:
+            if usuario_actual in lista_filtro_asesores:
+                idx_asesor_filtro = lista_filtro_asesores.index(usuario_actual)
+            disable_asesor_filtro = True
+            
+        f_asesor = c3.selectbox("Asesor", lista_filtro_asesores, index=idx_asesor_filtro, disabled=disable_asesor_filtro, key=f"ase_{key_suffix}")
+
         if sub_menu in ["Ventas por Validar", "Ventas Validadas"]:
-            c1, c2, c3 = st.columns(3)
-            f_ini = c1.date_input("Desde (F. Reg)", fecha_actual.date(), key=f"ini_{key_suffix}")
-            f_fin = c2.date_input("Hasta (F. Reg)", fecha_actual.date(), key=f"fin_{key_suffix}")
-            f_curso = c3.selectbox("Evento / Curso", lista_cursos, key=f"cur_{key_suffix}")
-            f_cliente, f_asesor, f_tipo, f_cuenta = "", "Todos", "Todos", "Todos"
+            f_curso = c4.selectbox("Evento / Curso", lista_cursos, key=f"cur_{key_suffix}")
+            f_cliente, f_tipo, f_cuenta = "", "Todos", "Todos"
         else:
-            c1, c2, c3, c4 = st.columns(4)
-            f_ini = c1.date_input("Desde (F. Reg)", fecha_actual.date(), key=f"ini_{key_suffix}")
-            f_fin = c2.date_input("Hasta (F. Reg)", fecha_actual.date(), key=f"fin_{key_suffix}")
-            f_cliente = c3.text_input("Cliente/DNI", placeholder="Buscar...", key=f"cli_{key_suffix}") 
-            
-            lista_filtro_asesores = ["Todos"] + lista_vendedores
-            idx_asesor_filtro = 0
-            disable_asesor_filtro = False
-            
-            if rol_actual not in ['admin', 'coordinador', 'auditor']:
-                if usuario_actual in lista_filtro_asesores:
-                    idx_asesor_filtro = lista_filtro_asesores.index(usuario_actual)
-                disable_asesor_filtro = True
-            f_asesor = c4.selectbox("Asesor", lista_filtro_asesores, index=idx_asesor_filtro, disabled=disable_asesor_filtro, key=f"ase_{key_suffix}")
-            
+            f_cliente = c4.text_input("Cliente/DNI", placeholder="Buscar...", key=f"cli_{key_suffix}") 
             c5, c6, c7 = st.columns(3)
             f_tipo = c5.selectbox("Tipo", ["Todos"] + VentaModel.get_tipos_venta(), key=f"tip_{key_suffix}")
             f_cuenta = c6.selectbox("Cuenta", ["Todos"] + VentaModel.get_cuentas(), key=f"cta_{key_suffix}")
             f_curso = c7.selectbox("Curso", lista_cursos, key=f"cur_{key_suffix}")
 
+    # Obtenemos la data ya filtrada por vendedor y fechas
     data_raw = VentaModel.get_historial_filtrado(f_ini, f_fin, f_asesor, f_tipo)
     df_hist = pd.DataFrame(data_raw)
     df_show = pd.DataFrame() 
@@ -335,17 +336,14 @@ def show_ordenes(sub_menu="Registrar Venta"):
         if 'por_validar' not in df_hist.columns: df_hist['por_validar'] = 0.0
         if 'descuento' not in df_hist.columns: df_hist['descuento'] = 0.0
 
-        # 🚨 NUEVA LÓGICA MATEMÁTICA: Saldo = Monto - (Ingreso Validado + Ingreso Por Validar)
-        # Esto hace que "Por Cobrar" sea 0 si el cliente ya dio el dinero completo, aunque esté por validar.
+        # Cálculo matemático correcto para el saldo
         df_hist['saldo'] = df_hist['monto'] - df_hist['ingreso'] - df_hist['por_validar']
         df_hist['saldo'] = df_hist['saldo'].apply(lambda x: max(0.0, x))
 
-        # 🚨 FILTROS ESTRICTOS PARA LAS PESTAÑAS:
+        # Filtros estrictos para las pestañas
         if sub_menu == "Ventas por Validar":
-            # Mostrar CUALQUIER venta que tenga dinero pendiente de revisar
             df_hist = df_hist[df_hist['por_validar'] > 0]
         elif sub_menu == "Ventas Validadas":
-            # Mostrar solo ventas que NO tienen dinero pendiente y ya tienen algo en caja (estado PAGADO o PARCIAL)
             df_hist = df_hist[(df_hist['por_validar'] == 0) & (df_hist['estado'].isin(['PAGADO', 'PARCIAL']))]
         
         if f_curso != "Todos":
@@ -364,37 +362,48 @@ def show_ordenes(sub_menu="Registrar Venta"):
         })
 
     with kpi_placeholder:
+        # 🟢 MODIFICACIÓN: Los KPIs ahora se calculan dinámicamente con los filtros aplicados y bloqueados por vendedor
         if sub_menu == "Registrar Venta":
             try:
                 hoy = fecha_actual.date()
-                data_hoy = VentaModel.get_historial_filtrado(hoy, hoy, 'Todos', 'Todos')
+                # Le pasamos f_asesor para que respete si es Vendedor (bloqueado) o Admin (filtro activo)
+                data_hoy = VentaModel.get_historial_filtrado(hoy, hoy, f_asesor, 'Todos')
                 df_hoy = pd.DataFrame(data_hoy)
-                
-                if rol_actual not in ['admin', 'coordinador', 'auditor']:
-                    df_hoy = df_hoy[df_hoy['vendedor'] == usuario_actual]
 
                 if not df_hoy.empty:
-                    df_hoy_g = df_hoy.groupby('id', as_index=False).agg({'monto': 'first'})
-                    total_ventas_hoy_cnt = len(df_hoy_g)
-                    monto_ventas_hoy = round(float(df_hoy_g['monto'].sum()), 2)
+                    df_hoy['por_validar'] = df_hoy['por_validar'].fillna(0.0)
+                    df_hoy['ingreso'] = df_hoy['ingreso'].fillna(0.0)
+                    df_hoy['monto'] = df_hoy['monto'].fillna(0.0)
+                    
+                    df_hoy_g = df_hoy.groupby('id', as_index=False).agg({'monto': 'first', 'saldo': 'first', 'estado': 'first', 'ingreso': 'first', 'por_validar':'first'})
+                    
+                    df_hoy_g['saldo_real'] = df_hoy_g['monto'] - df_hoy_g['ingreso'] - df_hoy_g['por_validar']
+                    df_hoy_g['saldo_real'] = df_hoy_g['saldo_real'].apply(lambda x: max(0.0, x))
+                    
+                    # Solo contamos las que ya no son PENDIENTES de validación o anuladas
+                    df_hoy_validas = df_hoy_g[df_hoy_g['estado'].isin(['PAGADO', 'PARCIAL'])]
+                    
+                    total_ventas_hoy_cnt = len(df_hoy_validas)
+                    monto_ventas_hoy = round(float(df_hoy_validas['monto'].sum()), 2)
+                    por_cobrar_hoy = round(float(df_hoy_validas['saldo_real'].sum()), 2)
                 else:
                     total_ventas_hoy_cnt = 0
                     monto_ventas_hoy = 0.0
+                    por_cobrar_hoy = 0.0
             except:
                 total_ventas_hoy_cnt = 0
                 monto_ventas_hoy = 0.0
+                por_cobrar_hoy = 0.0
 
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("FECHA SISTEMA", fecha_actual.strftime("%d/%m/%Y")) 
             c2.metric("VENTAS HOY", total_ventas_hoy_cnt)
             c3.metric("MONTO VENTAS HOY", f"S/ {monto_ventas_hoy:,.2f}")
-            kpis_base = VentaModel.get_kpis_hoy()
-            c4.metric("POR COBRAR TOTAL", f"S/ {float(kpis_base['por_cobrar']):,.2f}")
+            c4.metric("POR COBRAR (HOY)", f"S/ {por_cobrar_hoy:,.2f}")
         
         elif sub_menu == "Ventas por Validar":
             k1, k2 = st.columns(2)
             val_cnt = len(df_show) if not df_show.empty else 0
-            # Deuda real por validar
             val_deuda = round(float(df_show['por_validar'].sum()), 2) if not df_show.empty else 0.0
             k1.metric("CLIENTES POR VALIDAR", val_cnt)
             k2.metric("DINERO EN EL LIMBO (Por Validar)", f"S/ {val_deuda:,.2f}")
@@ -402,7 +411,6 @@ def show_ordenes(sub_menu="Registrar Venta"):
         elif sub_menu == "Ventas Validadas":
             k1, k2 = st.columns(2)
             val_cnt = len(df_show) if not df_show.empty else 0
-            # Dinero que ya ingresó a caja y fue validado
             val_total = round(float(df_show['ingreso'].sum()), 2) if not df_show.empty else 0.0
             k1.metric("VENTAS CON PAGOS VALIDADOS", val_cnt)
             k2.metric("DINERO REAL EN CAJA", f"S/ {val_total:,.2f}")
@@ -434,10 +442,10 @@ def show_ordenes(sub_menu="Registrar Venta"):
 
                 c_row1 = st.columns([1, 1.5, 1.5])
                 c_row1[0].text_input("ID Venta", value=f"{id_display}", disabled=True)
-                fecha_v_input = c_row1[1].date_input("📅 Fecha de Venta", value=st.session_state['form_data'].get("fecha_venta", fecha_actual.date()), help="Fecha en que se cerró la venta")
+                fecha_v_input = c_row1[1].date_input("📅 Fecha de Venta (Real)", value=st.session_state['form_data'].get("fecha_venta", fecha_actual.date()), help="Fecha en que se cerró la venta")
                 
                 es_admin = True if rol_actual == 'admin' else False
-                fecha_r_input = c_row1[2].date_input("🕒 Fecha de Registro", value=st.session_state['form_data'].get("fecha_registro", fecha_actual.date()), disabled=not es_admin, help="Se guarda automáticamente al registrar (Editable solo por Admin)")
+                fecha_r_input = c_row1[2].date_input("🕒 Fecha de Registro (Sistema)", value=st.session_state['form_data'].get("fecha_registro", fecha_actual.date()), disabled=not es_admin, help="Se guarda automáticamente al registrar (Editable solo por Admin)")
                 
                 st.markdown("<hr class='form-divider'>", unsafe_allow_html=True)
                 
