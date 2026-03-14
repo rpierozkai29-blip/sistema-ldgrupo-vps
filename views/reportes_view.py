@@ -39,7 +39,6 @@ def get_base_css_bw():
 
 def generar_html_participantes(df, info_evento):
     dias_semana = {0: 'LUNES', 1: 'MARTES', 2: 'MIÉRCOLES', 3: 'JUEVES', 4: 'VIERNES', 5: 'SÁBADO', 6: 'DOMINGO'}
-    # Se aplica la zona horaria al momento de generar el reporte
     fecha_dt = info_evento['fecha_evento'] if info_evento else datetime.now(zona_peru)
     dia_txt = dias_semana[fecha_dt.weekday()]
     fecha_corta = fecha_dt.strftime('%d/%m/%Y')
@@ -112,7 +111,8 @@ def get_data_bi_cohort_bd(mes_evento, anio_evento):
     if not conn: return pd.DataFrame()
     try:
         cur = conn.cursor(dictionary=True)
-        # LÓGICA AFINADA IDÉNTICA AL EXCEL + UNIFICACIÓN DE 'GB'
+        # 🚨 CORRECCIÓN CLAVE: Agregado "v.estado IN ('PAGADO', 'PARCIAL')" para que el Dashboard
+        # no lea las ventas en estado PENDIENTE (que aún no han sido validadas por el auditor).
         sql = """
             SELECT 
                 DATE(v.fecha_venta) as fecha_venta, 
@@ -134,8 +134,8 @@ def get_data_bi_cohort_bd(mes_evento, anio_evento):
             JOIN categorias cat ON c.categoria_id = cat.id
             WHERE MONTH(e.fecha_evento) = %s 
               AND YEAR(e.fecha_evento) = %s
-              AND v.estado != 'ANULADO'
-              AND dv.subtotal > 0  -- REGLA DE ORO: Excluir filas con total 0 como en Excel
+              AND v.estado IN ('PAGADO', 'PARCIAL')
+              AND dv.subtotal > 0 
         """
         cur.execute(sql, (mes_evento, anio_evento))
         raw_data = cur.fetchall()
@@ -351,7 +351,6 @@ def show_reportes(sub_menu):
 
     periodos_nombres_completos = ["Periodo 1 - Enero", "Periodo 2 - Febrero", "Periodo 3 - Marzo", "Periodo 4 - Abril", "Periodo 5 - Mayo", "Periodo 6 - Junio", "Periodo 7 - Julio", "Periodo 8 - Agosto", "Periodo 9 - Septiembre", "Periodo 10 - Octubre", "Periodo 11 - Noviembre", "Periodo 12 - Diciembre"]
     
-    # Aquí aplicamos la zona horaria para los selectores de año y mes
     anio_actual = datetime.now(zona_peru).year
     mes_actual = datetime.now(zona_peru).month
 
@@ -364,7 +363,6 @@ def show_reportes(sub_menu):
         c1, c2, c3, c4 = st.columns(4)
         anio_sel = c2.selectbox("Año", [anio_actual - 1, anio_actual, anio_actual + 1], index=1, key="dash_anio")
         
-        # MOSTRAR SIEMPRE LOS 12 MESES
         periodos_mostrar = periodos_nombres_completos
         def_idx = mes_actual - 1 if anio_sel == anio_actual else 11
         mes_sel = c1.selectbox("Periodo de Campaña", periodos_mostrar, index=def_idx, key="dash_mes")
@@ -380,7 +378,6 @@ def show_reportes(sub_menu):
         df_base = get_data_bi_cohort_bd(mes_numero, anio_sel)
         df_filtrado = df_base.copy()
         
-        # 🟢 AHORA SÍ: TRABAJAMOS 100% CON LA DATA REAL DE LA BASE DE DATOS
         if not df_filtrado.empty:
             if sel_cat: df_filtrado = df_filtrado[df_filtrado['categoria'].isin(sel_cat)]
             if sel_vend: df_filtrado = df_filtrado[df_filtrado['vendedor'].isin(sel_vend)]
