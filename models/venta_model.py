@@ -42,7 +42,7 @@ class VentaModel:
     def get_turnos(): return ["Mañana", "Tarde", "Noche"]
     
     @staticmethod
-    def get_estados_venta(): return ["PENDIENTE", "PAGADO", "ANULADO"]
+    def get_estados_venta(): return ["PENDIENTE", "PAGADO", "ANULADO", "PARCIAL"]
     
     @staticmethod
     def get_cuentas(): return ["Yape", "Plin", "BCP", "BBVA", "Efectivo", "MercadoPago", "CULQI"]
@@ -87,7 +87,6 @@ class VentaModel:
     # ==========================================
     @classmethod
     def get_eventos_activos(cls):
-        """Muestra todos los eventos que no estén cerrados y trae el stock para evaluar en la vista"""
         conn = Database.get_connection()
         if conn:
             try:
@@ -113,26 +112,20 @@ class VentaModel:
         if conn:
             try:
                 cur = conn.cursor()
-                # 1. Consulta Universal a prueba de errores
                 cur.execute("""
                     SELECT DISTINCT CONCAT(nombre_evento, ' [', DATE_FORMAT(fecha_evento, '%d/%m'), ']') as nombre_completo
                     FROM eventos 
                     ORDER BY nombre_completo DESC
                 """)
                 res_ev = cur.fetchall()
-                if res_ev:
-                    ev = [x[0] for x in res_ev]
+                if res_ev: ev = [x[0] for x in res_ev]
                 
-                # 2. Consulta de Categorías
                 cur.execute("SELECT DISTINCT nombre FROM categorias ORDER BY nombre ASC")
                 res_ca = cur.fetchall()
-                if res_ca:
-                    ca = [x[0] for x in res_ca]
+                if res_ca: ca = [x[0] for x in res_ca]
                     
-            except Exception as e:
-                print(f"Error cargando combos de eventos/categorias: {e}")
-            finally: 
-                conn.close()
+            except Exception as e: pass
+            finally: conn.close()
         return ev, ca
 
     @classmethod
@@ -141,15 +134,10 @@ class VentaModel:
         try:
             cur = conn.cursor(dictionary=True)
             sql = """
-                SELECT DISTINCT
-                    c.dni_ruc,
-                    c.nombre_completo
-                FROM detalle_ventas dv
-                JOIN ventas v ON dv.venta_id = v.id
-                JOIN clientes c ON v.cliente_id = c.id
+                SELECT DISTINCT c.dni_ruc, c.nombre_completo
+                FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id JOIN clientes c ON v.cliente_id = c.id
                 JOIN eventos e ON dv.evento_id = e.id
-                WHERE CONCAT(e.nombre_evento, ' [', DATE_FORMAT(e.fecha_evento, '%d/%m'), ']') = %s
-                AND v.estado != 'ANULADO'
+                WHERE CONCAT(e.nombre_evento, ' [', DATE_FORMAT(e.fecha_evento, '%d/%m'), ']') = %s AND v.estado != 'ANULADO'
                 ORDER BY c.nombre_completo ASC
             """
             cur.execute(sql, (nombre_evento_completo,))
@@ -163,15 +151,9 @@ class VentaModel:
         try:
             cur = conn.cursor(dictionary=True)
             sql = """
-                SELECT 
-                    e.nombre_evento,
-                    e.fecha_evento,
-                    t.hora_inicio,
-                    t.nombre as turno
-                FROM eventos e
-                LEFT JOIN turnos t ON e.turno_id = t.id
-                WHERE CONCAT(e.nombre_evento, ' [', DATE_FORMAT(e.fecha_evento, '%d/%m'), ']') = %s
-                LIMIT 1
+                SELECT e.nombre_evento, e.fecha_evento, t.hora_inicio, t.nombre as turno
+                FROM eventos e LEFT JOIN turnos t ON e.turno_id = t.id
+                WHERE CONCAT(e.nombre_evento, ' [', DATE_FORMAT(e.fecha_evento, '%d/%m'), ']') = %s LIMIT 1
             """
             cur.execute(sql, (nombre_evento_completo,))
             return cur.fetchone()
@@ -188,8 +170,7 @@ class VentaModel:
         try:
             cur = conn.cursor()
             
-            # 🚨 CORRECCIÓN CRÍTICA: Usamos la variable 'estado' que la vista nos manda ('PENDIENTE')
-            # El saldo_pendiente nace siendo igual al total, porque aún no hay dinero validado en caja.
+            # La venta nace con el estado que envía la vista (PENDIENTE) y el saldo pendiente es el Total
             sql_v = "INSERT INTO ventas (cliente_id, usuario_id, total, descuento, saldo_pendiente, estado, tipo_venta, observacion, fecha_venta, fecha_registro) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             cur.execute(sql_v, (id_cliente, id_usuario, total, descuento, total, estado, tipo_venta, observacion, fecha_venta, fecha_registro))
             venta_id = cur.lastrowid
@@ -206,8 +187,7 @@ class VentaModel:
             for item in items_venta:
                 cur.execute("""
                     UPDATE eventos SET stock_vendido = (
-                        SELECT COUNT(*) FROM detalle_ventas dv 
-                        JOIN ventas v ON dv.venta_id = v.id 
+                        SELECT COUNT(*) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id 
                         WHERE dv.evento_id = %s AND v.estado != 'ANULADO'
                     ) WHERE id = %s
                 """, (item['id'], item['id']))
@@ -226,7 +206,6 @@ class VentaModel:
         conn = Database.get_connection()
         try:
             cur = conn.cursor()
-            
             cur.execute("SELECT evento_id FROM detalle_ventas WHERE venta_id = %s", (id_venta,))
             eventos_viejos = [row[0] for row in cur.fetchall()]
 
@@ -241,23 +220,18 @@ class VentaModel:
             sql_c = "UPDATE clientes SET nombre_completo=%s, celular=%s, email=%s, distrito_id=%s WHERE dni_ruc=%s"
             cur.execute(sql_c, (d_cli['nombre'], d_cli['celular'], d_cli['email'], d_cli['distrito_id'], d_cli['dni']))
 
-            # ACTUALIZACIÓN DE STOCK IGNORANDO ANULADOS
             eventos_afectados = set(eventos_viejos + [item['id'] for item in items_venta])
             for ev_id in eventos_afectados:
                 cur.execute("""
                     UPDATE eventos SET stock_vendido = (
-                        SELECT COUNT(*) FROM detalle_ventas dv 
-                        JOIN ventas v ON dv.venta_id = v.id 
+                        SELECT COUNT(*) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id 
                         WHERE dv.evento_id = %s AND v.estado != 'ANULADO'
                     ) WHERE id = %s
                 """, (ev_id, ev_id))
                 cur.execute("UPDATE eventos SET estado = CASE WHEN stock_vendido >= stock_maximo AND stock_maximo > 0 THEN 'LLENO' ELSE 'ABIERTO' END WHERE id = %s", (ev_id,))
 
             conn.commit()
-            
-            # Recalcular saldos y estado tras el update
             cls.recalcular_saldos_venta(id_venta)
-            
             return True, "Venta actualizada correctamente."
         except Exception as e:
             if conn: conn.rollback()
@@ -270,20 +244,16 @@ class VentaModel:
         try:
             conn = Database.get_connection()
             cursor = conn.cursor()
-            
             cursor.execute("SELECT evento_id FROM detalle_ventas WHERE venta_id = %s", (id_venta,))
             eventos_afectados = cursor.fetchall()
             
-            # 💡 EL BORRADO LÓGICO: Solo cambiamos el estado de la venta y anulamos pagos pendientes
             cursor.execute("UPDATE ventas SET estado = 'ANULADO' WHERE id = %s", (id_venta,))
             cursor.execute("UPDATE pagos SET estado = 'ANULADO' WHERE venta_id = %s AND estado = 'PENDIENTE'", (id_venta,))
             
-            # Recalcular el stock (Como la venta es ANULADA, el asiento vuelve a estar libre)
             for ev in eventos_afectados:
                 cursor.execute("""
                     UPDATE eventos SET stock_vendido = (
-                        SELECT COUNT(*) FROM detalle_ventas dv 
-                        JOIN ventas v ON dv.venta_id = v.id 
+                        SELECT COUNT(*) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id 
                         WHERE dv.evento_id = %s AND v.estado != 'ANULADO'
                     ) WHERE id = %s
                 """, (ev[0], ev[0]))
@@ -326,17 +296,13 @@ class VentaModel:
             cur = conn.cursor(dictionary=True)
             sql = """
                 SELECT p.id, p.fecha_pago, p.monto, p.metodo_pago, p.nro_operacion, p.estado, u.nombre as registrado_por
-                FROM pagos p
-                LEFT JOIN usuarios u ON p.usuario_id = u.id
-                WHERE p.venta_id = %s
-                ORDER BY p.fecha_pago DESC
+                FROM pagos p LEFT JOIN usuarios u ON p.usuario_id = u.id
+                WHERE p.venta_id = %s ORDER BY p.fecha_pago DESC
             """
             cur.execute(sql, (venta_id,))
             return cur.fetchall()
-        except:
-            return []
-        finally:
-            conn.close()
+        except: return []
+        finally: conn.close()
     
     @classmethod
     def validar_pago_individual(cls, pago_id):
@@ -344,7 +310,6 @@ class VentaModel:
         try:
             conn.start_transaction()
             cur = conn.cursor(dictionary=True)
-            
             cur.execute("UPDATE pagos SET estado = 'PAGADO', fecha_validacion = NOW() WHERE id = %s", (pago_id,))
             
             cur.execute("SELECT venta_id FROM pagos WHERE id = %s", (pago_id,))
@@ -353,10 +318,7 @@ class VentaModel:
             venta_id = pago_info['venta_id']
             
             conn.commit()
-            
-            # Recalcular saldos al validar pago
             cls.recalcular_saldos_venta(venta_id)
-            
             return True, "✅ Pago validado con éxito. El dinero ya ingresó a caja."
         except Exception as e:
             conn.rollback()
@@ -366,29 +328,23 @@ class VentaModel:
 
     @classmethod
     def recalcular_saldos_venta(cls, venta_id):
-        """Función auxiliar para asegurar que el saldo de la venta sea siempre exacto"""
         conn = Database.get_connection()
         try:
             cur = conn.cursor(dictionary=True)
-            
-            # Sumar todos los pagos VALIDADOS
             cur.execute("SELECT SUM(monto) as total_validado FROM pagos WHERE venta_id = %s AND estado = 'PAGADO'", (venta_id,))
             suma_validados = cur.fetchone()['total_validado'] or 0.0
             total_validado = round(float(suma_validados), 2)
             
-            # Obtener el total original de la venta
             cur.execute("SELECT total FROM ventas WHERE id = %s", (venta_id,))
             venta_info = cur.fetchone()
             total_venta = round(float(venta_info['total']), 2)
-            
-            # Calcular el saldo real pendiente
             nuevo_saldo = round(total_venta - total_validado, 2)
             
-            # 🚨 LÓGICA ESTRICTA DE ESTADOS PARA EL DASHBOARD:
+            # LÓGICA ESTRICTA:
             if nuevo_saldo <= 0.01:
-                nuevo_estado = 'PAGADO'      
+                nuevo_estado = 'PAGADO'
             elif total_validado == 0:
-                nuevo_estado = 'PENDIENTE'   
+                nuevo_estado = 'PENDIENTE'
             else:
                 nuevo_estado = 'PARCIAL'
             
@@ -398,6 +354,7 @@ class VentaModel:
             if conn: conn.rollback()
         finally:
             if conn: conn.close()
+
 
     # ==========================================
     # --- 5. LECTURA DE REPORTES Y TABLAS ---
@@ -425,11 +382,9 @@ class VentaModel:
                     WHERE DATE(v.fecha_registro) BETWEEN %s AND %s
                 """
                 params = [f_ini, f_fin]
-                
                 if f_asesor != "Todos": 
                     sql += " AND u.nombre = %s"
                     params.append(f_asesor)
-                    
                 if f_tipo != "Todos": 
                     sql += " AND v.tipo_venta = %s"
                     params.append(f_tipo)
@@ -440,20 +395,11 @@ class VentaModel:
                 
                 for row in data:
                     f_obj = row['fecha_evento']
-                    str_f = ""
-                    if isinstance(f_obj, (date, datetime)):
-                        str_f = f_obj.strftime("%d/%m")
-                    elif isinstance(f_obj, str):
-                        try:
-                            str_f = datetime.strptime(f_obj, "%Y-%m-%d").strftime("%d/%m")
-                        except: pass
-                    
+                    str_f = f_obj.strftime("%d/%m") if isinstance(f_obj, (date, datetime)) else ""
                     row['curso_fmt'] = f"{row['nombre_evento']} [{str_f}]"
                 return data
-            except:
-                return []
-            finally:
-                conn.close()
+            except: return []
+            finally: conn.close()
         return []
 
     @classmethod
@@ -462,7 +408,7 @@ class VentaModel:
         if conn:
             try: 
                 cur=conn.cursor(dictionary=True)
-                # 🚨 MODIFICADO: Solo sumar si el estado es PAGADO o PARCIAL (se ignora PENDIENTE)
+                # 🚨 Dashboard y KPIs ignoran PENDIENTES
                 cur.execute("SELECT COUNT(*) c, SUM(saldo_pendiente) d FROM ventas WHERE DATE(fecha_venta)=CURDATE() AND estado IN ('PAGADO', 'PARCIAL')")
                 r=cur.fetchone()
                 kpis['total_ventas']=r['c']
@@ -476,6 +422,7 @@ class VentaModel:
         conn = Database.get_connection()
         try:
             cur = conn.cursor(dictionary=True)
+            # 🚨 Dashboard ignora completamente las ventas PENDIENTES
             sql = """SELECT v.fecha_venta, u.nombre as vendedor, cat.nombre as producto, dv.subtotal as monto
                      FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id JOIN usuarios u ON v.usuario_id = u.id
                      JOIN eventos e ON dv.evento_id = e.id JOIN cursos c ON e.curso_id = c.id JOIN categorias cat ON c.categoria_id = cat.id
@@ -501,7 +448,7 @@ class VentaModel:
     @classmethod
     def get_detalle_ventas_completo(cls, f_ini, f_fin):
         conn = Database.get_connection()
-        if not conn: return []  # <-- Escudo protector 1
+        if not conn: return []
         try:
             cur = conn.cursor(dictionary=True)
             sql = """
@@ -521,21 +468,19 @@ class VentaModel:
                 JOIN eventos e ON dv.evento_id = e.id
                 JOIN cursos cur ON e.curso_id = cur.id
                 JOIN categorias cat ON cur.categoria_id = cat.id
-                WHERE DATE(v.fecha_venta) BETWEEN %s AND %s
+                WHERE DATE(v.fecha_venta) BETWEEN %s AND %s AND v.estado IN ('PAGADO', 'PARCIAL')
                 ORDER BY v.fecha_registro DESC
             """
             cur.execute(sql, (f_ini, f_fin))
             return cur.fetchall()
-        except Exception as e: 
-            print(f"Error en Detalle Ventas: {e}")
-            return []
+        except Exception as e: return []
         finally: 
-            if conn: conn.close()  # <-- Escudo protector 2
+            if conn: conn.close()
 
     @classmethod
     def get_reporte_deudas_detallado(cls, f_ini, f_fin):
         conn = Database.get_connection()
-        if not conn: return []  # <-- Escudo protector 1
+        if not conn: return []
         try:
             cur = conn.cursor(dictionary=True)
             sql = """
@@ -547,13 +492,11 @@ class VentaModel:
                 FROM ventas v JOIN clientes c ON v.cliente_id = c.id JOIN usuarios u ON v.usuario_id = u.id
                 JOIN detalle_ventas dv ON v.id = dv.venta_id JOIN eventos e ON dv.evento_id = e.id
                 JOIN cursos cur ON e.curso_id = cur.id JOIN categorias cat ON cur.categoria_id = cat.id
-                WHERE DATE(v.fecha_venta) BETWEEN %s AND %s AND v.saldo_pendiente > 0 AND v.estado != 'ANULADO'
+                WHERE DATE(v.fecha_venta) BETWEEN %s AND %s AND v.saldo_pendiente > 0 AND v.estado IN ('PAGADO', 'PARCIAL')
                 ORDER BY v.fecha_registro DESC
             """
             cur.execute(sql, (f_ini, f_fin))
             return cur.fetchall()
-        except Exception as e: 
-            print(f"Error en Deudas: {e}")
-            return []
+        except Exception as e: return []
         finally: 
-            if conn: conn.close()  # <-- Escudo protector 2
+            if conn: conn.close()
