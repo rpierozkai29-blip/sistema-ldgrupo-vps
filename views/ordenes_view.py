@@ -335,10 +335,18 @@ def show_ordenes(sub_menu="Registrar Venta"):
         if 'por_validar' not in df_hist.columns: df_hist['por_validar'] = 0.0
         if 'descuento' not in df_hist.columns: df_hist['descuento'] = 0.0
 
+        # 🚨 NUEVA LÓGICA MATEMÁTICA: Saldo = Monto - (Ingreso Validado + Ingreso Por Validar)
+        # Esto hace que "Por Cobrar" sea 0 si el cliente ya dio el dinero completo, aunque esté por validar.
+        df_hist['saldo'] = df_hist['monto'] - df_hist['ingreso'] - df_hist['por_validar']
+        df_hist['saldo'] = df_hist['saldo'].apply(lambda x: max(0.0, x))
+
+        # 🚨 FILTROS ESTRICTOS PARA LAS PESTAÑAS:
         if sub_menu == "Ventas por Validar":
-            df_hist = df_hist[~df_hist['estado'].isin(['PAGADO', 'ANULADO'])]
+            # Mostrar CUALQUIER venta que tenga dinero pendiente de revisar
+            df_hist = df_hist[df_hist['por_validar'] > 0]
         elif sub_menu == "Ventas Validadas":
-            df_hist = df_hist[df_hist['estado'].isin(['PAGADO', 'PARCIAL'])]
+            # Mostrar solo ventas que NO tienen dinero pendiente y ya tienen algo en caja (estado PAGADO o PARCIAL)
+            df_hist = df_hist[(df_hist['por_validar'] == 0) & (df_hist['estado'].isin(['PAGADO', 'PARCIAL']))]
         
         if f_curso != "Todos":
             nombre_curso_filtro = f_curso.split(" [")[0]
@@ -386,16 +394,18 @@ def show_ordenes(sub_menu="Registrar Venta"):
         elif sub_menu == "Ventas por Validar":
             k1, k2 = st.columns(2)
             val_cnt = len(df_show) if not df_show.empty else 0
-            val_deuda = round(float(df_show['saldo'].sum()), 2) if not df_show.empty else 0.0
+            # Deuda real por validar
+            val_deuda = round(float(df_show['por_validar'].sum()), 2) if not df_show.empty else 0.0
             k1.metric("CLIENTES POR VALIDAR", val_cnt)
-            k2.metric("TOTAL POR COBRAR", f"S/ {val_deuda:,.2f}")
+            k2.metric("DINERO EN EL LIMBO (Por Validar)", f"S/ {val_deuda:,.2f}")
 
         elif sub_menu == "Ventas Validadas":
             k1, k2 = st.columns(2)
             val_cnt = len(df_show) if not df_show.empty else 0
-            val_total = round(float(df_show['monto'].sum()), 2) if not df_show.empty else 0.0
-            k1.metric("VENTAS VALIDADAS", val_cnt)
-            k2.metric("DINERO VALIDADO", f"S/ {val_total:,.2f}")
+            # Dinero que ya ingresó a caja y fue validado
+            val_total = round(float(df_show['ingreso'].sum()), 2) if not df_show.empty else 0.0
+            k1.metric("VENTAS CON PAGOS VALIDADOS", val_cnt)
+            k2.metric("DINERO REAL EN CAJA", f"S/ {val_total:,.2f}")
 
     # --- FORMULARIO DE REGISTRO MULTI-CURSO ---
     if sub_menu == "Registrar Venta" or st.session_state['is_editing']:
@@ -424,9 +434,8 @@ def show_ordenes(sub_menu="Registrar Venta"):
 
                 c_row1 = st.columns([1, 1.5, 1.5])
                 c_row1[0].text_input("ID Venta", value=f"{id_display}", disabled=True)
-                fecha_v_input = c_row1[1].date_input("📅 Fecha de Venta (Real)", value=st.session_state['form_data'].get("fecha_venta", fecha_actual.date()), help="Fecha en que se cerró la venta")
+                fecha_v_input = c_row1[1].date_input("📅 Fecha de Venta", value=st.session_state['form_data'].get("fecha_venta", fecha_actual.date()), help="Fecha en que se cerró la venta")
                 
-                # 🟢 MODIFICACIÓN AQUÍ: Habilitar la edición de la fecha de registro solo para administradores
                 es_admin = True if rol_actual == 'admin' else False
                 fecha_r_input = c_row1[2].date_input("🕒 Fecha de Registro", value=st.session_state['form_data'].get("fecha_registro", fecha_actual.date()), disabled=not es_admin, help="Se guarda automáticamente al registrar (Editable solo por Admin)")
                 

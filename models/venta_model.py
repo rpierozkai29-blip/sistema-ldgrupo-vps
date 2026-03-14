@@ -460,7 +460,8 @@ class VentaModel:
         if conn:
             try: 
                 cur=conn.cursor(dictionary=True)
-                cur.execute("SELECT COUNT(*) c, SUM(saldo_pendiente) d FROM ventas WHERE DATE(fecha_venta)=CURDATE() AND estado != 'ANULADO'")
+                # 🚨 MODIFICADO: Solo sumar si el estado es PAGADO o PARCIAL (se ignora PENDIENTE)
+                cur.execute("SELECT COUNT(*) c, SUM(saldo_pendiente) d FROM ventas WHERE DATE(fecha_venta)=CURDATE() AND estado IN ('PAGADO', 'PARCIAL')")
                 r=cur.fetchone()
                 kpis['total_ventas']=r['c']
                 kpis['por_cobrar']=float(r['d'] or 0)
@@ -476,7 +477,7 @@ class VentaModel:
             sql = """SELECT v.fecha_venta, u.nombre as vendedor, cat.nombre as producto, dv.subtotal as monto
                      FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id JOIN usuarios u ON v.usuario_id = u.id
                      JOIN eventos e ON dv.evento_id = e.id JOIN cursos c ON e.curso_id = c.id JOIN categorias cat ON c.categoria_id = cat.id
-                     WHERE DATE(v.fecha_venta) BETWEEN %s AND %s AND v.estado != 'ANULADO'"""
+                     WHERE DATE(v.fecha_venta) BETWEEN %s AND %s AND v.estado IN ('PAGADO', 'PARCIAL')"""
             cur.execute(sql, (f_ini, f_fin))
             return cur.fetchall()
         except: return []
