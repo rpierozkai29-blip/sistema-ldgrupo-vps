@@ -377,7 +377,6 @@ def show_ordenes(sub_menu="Registrar Venta"):
                 monto_ventas_hoy = 0.0
 
             c1, c2, c3, c4 = st.columns(4)
-            # CORRECCIÓN AQUÍ: Se usa 'fecha_actual' en lugar de 'datetime.now()'
             c1.metric("FECHA SISTEMA", fecha_actual.strftime("%d/%m/%Y")) 
             c2.metric("VENTAS HOY", total_ventas_hoy_cnt)
             c3.metric("MONTO VENTAS HOY", f"S/ {monto_ventas_hoy:,.2f}")
@@ -425,8 +424,12 @@ def show_ordenes(sub_menu="Registrar Venta"):
 
                 c_row1 = st.columns([1, 1.5, 1.5])
                 c_row1[0].text_input("ID Venta", value=f"{id_display}", disabled=True)
-                fecha_v_input = c_row1[1].date_input("📅 Fecha de Venta (Real)", value=st.session_state['form_data'].get("fecha_venta", fecha_actual.date()), help="Fecha en que se cerró la venta")
-                fecha_r_input = c_row1[2].date_input("🕒 Fecha de Registro (Sistema)", value=st.session_state['form_data'].get("fecha_registro", fecha_actual.date()), disabled=True, help="Se guarda automáticamente al registrar")
+                fecha_v_input = c_row1[1].date_input("📅 Fecha de Venta", value=st.session_state['form_data'].get("fecha_venta", fecha_actual.date()), help="Fecha en que se cerró la venta")
+                
+                # 🟢 MODIFICACIÓN AQUÍ: Habilitar la edición de la fecha de registro solo para administradores
+                es_admin = True if rol_actual == 'admin' else False
+                fecha_r_input = c_row1[2].date_input("🕒 Fecha de Registro", value=st.session_state['form_data'].get("fecha_registro", fecha_actual.date()), disabled=not es_admin, help="Se guarda automáticamente al registrar (Editable solo por Admin)")
+                
                 st.markdown("<hr class='form-divider'>", unsafe_allow_html=True)
                 
                 c_row2 = st.columns(2)
@@ -522,7 +525,6 @@ def show_ordenes(sub_menu="Registrar Venta"):
                 
                 op_input = c_pag3.text_input("N° Operación (Inicial)", value=st.session_state['form_data'].get("operacion", ""))
                 
-                # MODIFICACION: Validar rol_actual para habilitar selector a Admin o Coordinador
                 if not st.session_state['is_editing']:
                     if rol_actual in ['admin', 'coordinador']: 
                         v_idx = None
@@ -546,13 +548,16 @@ def show_ordenes(sub_menu="Registrar Venta"):
                 for c in curso_input:
                     info_c = mapa_eventos.get(c, {})
                     if info_c.get('is_lleno', False) and not st.session_state['is_editing']:
-                        st.error(f"🚨 El curso **{c}** está lleno. No se puede registrar.")
-                        deshabilitar_boton = True
-                        break
+                        if rol_actual in ['admin', 'coordinador']:
+                            st.warning(f"⚠️ Atención: Estás inscribiendo al alumno en el curso **{c}** que ya ha alcanzado su límite de aforo.")
+                        else:
+                            st.error(f"🚨 El curso **{c}** está lleno. No se puede registrar.")
+                            deshabilitar_boton = True
+                            break
                 
                 if st.button(label_btn, type="primary", use_container_width=True, disabled=deshabilitar_boton):
                     st.session_state['form_data'].update({
-                        "fecha_venta": fecha_v_input, "dni": dni_input, "cliente": nom_input, 
+                        "fecha_venta": fecha_v_input, "fecha_registro": fecha_r_input, "dni": dni_input, "cliente": nom_input, 
                         "celular": cel_input, "distrito": dist_input, "curso": curso_input, 
                         "turno": turno_input, "email": email_input, "monto": monto_input, 
                         "dscto": dscto_input, "a_cuenta": acuenta_input, "tipo": tipo_input, 
@@ -586,7 +591,7 @@ def show_ordenes(sub_menu="Registrar Venta"):
                             dist_id = VentaModel.get_id_distrito(dist_input); id_usuario_final = mapa_vendedores.get(vend_nombre_input, 1)
                             d_cli = {'dni': dni_input, 'nombre': nom_input, 'celular': cel_input, 'email': email_input, 'distrito_id': dist_id}
                             
-                            d_ven = {'precio': total_calc, 'descuento': dscto_input, 'obs': obs_input, 'tipo_venta': tipo_input, 'fecha_venta': fecha_v_input}
+                            d_ven = {'precio': total_calc, 'descuento': dscto_input, 'obs': obs_input, 'tipo_venta': tipo_input, 'fecha_venta': fecha_v_input, 'fecha_registro': fecha_r_input}
                             d_pag = {'monto': acuenta_input, 'metodo': cuenta_input}
                             
                             if st.session_state['is_editing']:
@@ -611,9 +616,9 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                     conn.close()
                                 except: st.error("Error al registrar el cliente en BD"); st.stop()
                                 
-                                # 🚨 NUEVO FLUJO: Toda venta nace obligatoriamente como PENDIENTE de validación
+                                # 🚨 NUEVO FLUJO: Toda venta nace obligatoriamente como PENDIENTE de validación (Se añade fecha_r_input al final)
                                 estado_calculado = 'PENDIENTE'
-                                ok, msg = VentaModel.registrar_venta_completa(id_cliente, id_usuario_final, total_calc, saldo_calc, estado_calculado, tipo_input, items_venta, acuenta_input, cuenta_input, op_input, obs_input, fecha_v_input, dscto_input)
+                                ok, msg = VentaModel.registrar_venta_completa(id_cliente, id_usuario_final, total_calc, saldo_calc, estado_calculado, tipo_input, items_venta, acuenta_input, cuenta_input, op_input, obs_input, fecha_v_input, dscto_input, fecha_r_input)
                                 if ok: 
                                     st.success("✅ ¡Venta Registrada!")
                                     st.session_state['form_data'] = reset_dict.copy()
@@ -724,7 +729,6 @@ def show_ordenes(sub_menu="Registrar Venta"):
                             
                             precio_base_catalogo = sum([mapa_eventos[c]['precio'] for c in curso_display_matches if c in mapa_eventos])
 
-                            # 🛠️ CORRECCIÓN: Rescatamos el N° de Operación original del pago para mostrarlo al editar
                             op_inicial = ""
                             if historial_pagos:
                                 op_inicial = str(historial_pagos[-1].get('nro_operacion') or "")
