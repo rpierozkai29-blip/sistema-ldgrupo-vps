@@ -188,19 +188,17 @@ class VentaModel:
         try:
             cur = conn.cursor()
             
-            # 🚨 MODIFICACIÓN: Siempre nace como PARCIAL hasta que el auditor valide el dinero
-            estado_inicial = "PARCIAL" 
-            
+            # 🚨 CORRECCIÓN CRÍTICA: Usamos la variable 'estado' que la vista nos manda ('PENDIENTE')
+            # El saldo_pendiente nace siendo igual al total, porque aún no hay dinero validado en caja.
             sql_v = "INSERT INTO ventas (cliente_id, usuario_id, total, descuento, saldo_pendiente, estado, tipo_venta, observacion, fecha_venta, fecha_registro) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-            cur.execute(sql_v, (id_cliente, id_usuario, total, descuento, total, estado_inicial, tipo_venta, observacion, fecha_venta, fecha_registro))
+            cur.execute(sql_v, (id_cliente, id_usuario, total, descuento, total, estado, tipo_venta, observacion, fecha_venta, fecha_registro))
             venta_id = cur.lastrowid
 
             sql_d = "INSERT INTO detalle_ventas (venta_id, evento_id, precio_unitario, subtotal) VALUES (%s, %s, %s, %s)"
             for item in items_venta:
                 cur.execute(sql_d, (venta_id, item['id'], item['precio_base'], item['subtotal']))
 
-            if monto_pago > 0:
-                # 🚨 MODIFICACIÓN: El pago nace como PENDIENTE
+            if float(monto_pago) > 0:
                 sql_p = "INSERT INTO pagos (venta_id, monto, metodo_pago, nro_operacion, usuario_id, estado, fecha_pago) VALUES (%s, %s, %s, %s, %s, 'PENDIENTE', %s)"
                 cur.execute(sql_p, (venta_id, monto_pago, metodo_pago, operacion, id_usuario, fecha_venta))
 
@@ -383,11 +381,16 @@ class VentaModel:
             venta_info = cur.fetchone()
             total_venta = round(float(venta_info['total']), 2)
             
-            # Calcular el saldo
+            # Calcular el saldo real pendiente
             nuevo_saldo = round(total_venta - total_validado, 2)
             
-            # Si el saldo es 0 (o menos), se marca como PAGADO. Si no, vuelve a PARCIAL.
-            nuevo_estado = 'PAGADO' if nuevo_saldo <= 0.01 else 'PARCIAL'
+            # 🚨 LÓGICA ESTRICTA DE ESTADOS PARA EL DASHBOARD:
+            if nuevo_saldo <= 0.01:
+                nuevo_estado = 'PAGADO'      
+            elif total_validado == 0:
+                nuevo_estado = 'PENDIENTE'   
+            else:
+                nuevo_estado = 'PARCIAL'
             
             cur.execute("UPDATE ventas SET saldo_pendiente = %s, estado = %s WHERE id = %s", (nuevo_saldo, nuevo_estado, venta_id))
             conn.commit()
@@ -395,7 +398,6 @@ class VentaModel:
             if conn: conn.rollback()
         finally:
             if conn: conn.close()
-
 
     # ==========================================
     # --- 5. LECTURA DE REPORTES Y TABLAS ---
