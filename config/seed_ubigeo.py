@@ -11,7 +11,7 @@ from config.database import Database
 def seed_database():
     conn = None
     try:
-        # Ignorar certificados SSL para la descarga segura
+        # Ignorar certificados SSL para la descarga segura desde GitHub
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -61,25 +61,26 @@ def seed_database():
         dists_raw = json.loads(req_di.read())
         
         print("🏗️ Armando estructura de Departamentos, Provincias y Distritos...")
-        # Guardar IDs de departamentos
+        
+        # 🟢 NUEVA LÓGICA DE DICCIONARIO SIMPLE
         mapa_deps = {}
-        for d in deps_raw:
-            cursor.execute("INSERT INTO departamentos (nombre) VALUES (%s)", (d['nombre_ubigeo'].title(),))
-            mapa_deps[d['id_ubigeo']] = cursor.lastrowid
+        for cod_dep, nom_dep in deps_raw.items():
+            cursor.execute("INSERT INTO departamentos (nombre) VALUES (%s)", (nom_dep.title(),))
+            mapa_deps[cod_dep] = cursor.lastrowid
             
-        # Guardar IDs de provincias y vincularlas
         mapa_provs = {}
-        for p in provs_raw:
-            id_dep = mapa_deps.get(p['id_padre_ubigeo'])
+        for cod_prov, nom_prov in provs_raw.items():
+            cod_dep = cod_prov[:2] # Los primeros 2 caracteres indican a qué Dep. pertenece
+            id_dep = mapa_deps.get(cod_dep)
             if id_dep:
-                cursor.execute("INSERT INTO provincias (departamento_id, nombre) VALUES (%s, %s)", (id_dep, p['nombre_ubigeo'].title()))
-                mapa_provs[p['id_ubigeo']] = cursor.lastrowid
+                cursor.execute("INSERT INTO provincias (departamento_id, nombre) VALUES (%s, %s)", (id_dep, nom_prov.title()))
+                mapa_provs[cod_prov] = cursor.lastrowid
 
-        # Insertar distritos vinculados a su provincia
-        for di in dists_raw:
-            id_prov = mapa_provs.get(di['id_padre_ubigeo'])
+        for cod_dist, nom_dist in dists_raw.items():
+            cod_prov = cod_dist[:4] # Los primeros 4 caracteres indican a qué Prov. pertenece
+            id_prov = mapa_provs.get(cod_prov)
             if id_prov:
-                cursor.execute("INSERT INTO distritos (provincia_id, nombre) VALUES (%s, %s)", (id_prov, di['nombre_ubigeo'].title()))
+                cursor.execute("INSERT INTO distritos (provincia_id, nombre) VALUES (%s, %s)", (id_prov, nom_dist.title()))
 
         conn.commit()
         print("✅ ¡Éxito Total! Base de datos actualizada con ubicaciones reales.")
