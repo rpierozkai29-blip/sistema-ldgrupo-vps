@@ -14,6 +14,7 @@ fecha_actual = datetime.now(zona_peru)
 
 @st.dialog("➕ Registrar Nueva Cuota")
 def registrar_cuota_dialog(id_venta, cliente, deuda_actual, total_venta, pagado_anterior):
+    fecha_actual = datetime.now(zona_peru)
     try:
         deuda_actual = round(float(deuda_actual), 2)
         total_venta = round(float(total_venta), 2)
@@ -247,6 +248,7 @@ def buscar_cliente_bd(valor, por_dni=True):
 # --- 3. VISTA PRINCIPAL ---
 def show_ordenes(sub_menu="Registrar Venta"):
     cargar_css_elegante()
+    fecha_actual = datetime.now(zona_peru)
 
     if 'form_key_counter' not in st.session_state:
         st.session_state['form_key_counter'] = 0
