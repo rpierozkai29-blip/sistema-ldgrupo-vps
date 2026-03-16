@@ -4,7 +4,7 @@ import base64
 import os
 from views import ordenes_view, reportes_view, login_view, mantenimiento_view, reporte_diario_view 
 
-st.set_page_config(page_title="Sistema LDGROUP", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Sistema LD GRUPO", layout="wide", initial_sidebar_state="expanded")
 
 # FUNCIÓN CSS DINÁMICO Y ESTILOS GLOBALES
 
@@ -52,7 +52,7 @@ def main():
         usuario_nombre = st.session_state.get('usuario', 'Usuario')
 
         with st.sidebar:
-            st.title("Sistema LD")
+            st.title("Sistema LD") # 🟢 Actualizado
             st.write(f"Hola, **{usuario_nombre}**")
             st.caption(f"Rol: {rol_usuario.capitalize()}")
             
@@ -95,7 +95,8 @@ def main():
                     sac.MenuItem('Agenda de Cursos', icon='calendar-plus'),
                     sac.MenuItem('Registro de Usuario', icon='person-plus'),
                     sac.MenuItem('Registro de Cursos', icon='book'),      
-                    sac.MenuItem('Registro de Periodos', icon='clock'),   
+                    sac.MenuItem('Registro de Periodos', icon='clock'),
+                    sac.MenuItem('Parámetros de Venta', icon='tags'), # 🟢 AQUÍ ESTÁ EL NUEVO MENÚ (Tipos y Orígenes)
                 ]))
             elif rol_usuario == 'coordinador':
                 menu_items.append(sac.MenuItem('Mantenimiento', icon='gear', children=[
@@ -130,7 +131,7 @@ def main():
         if selected == 'Inicio':
             st.markdown(f"""
                 <div style='text-align: center; margin-top: 15%;'>
-                    <h1 style='color: #1f2937; text-shadow: 2px 2px 5px rgba(255,255,255,0.8); font-size: 3.5rem;'>¡Bienvenido al Sistema LD!</h1>
+                    <h1 style='color: #1f2937; text-shadow: 2px 2px 5px rgba(255,255,255,0.8); font-size: 3.5rem;'>¡Bienvenido al Sistema Academia Cyberseguridad!</h1>
                     <h3 style='color: #d32f2f; text-shadow: 1px 1px 3px rgba(255,255,255,0.9);'>Has iniciado sesión como {usuario_nombre}</h3>
                 </div>
             """, unsafe_allow_html=True)
@@ -162,7 +163,8 @@ def main():
                 mantenimiento_view.show_mantenimiento(selected)
             else: st.error("Acceso denegado. Solo Administradores o Coordinadores.")
             
-        elif selected == 'Registro de Usuario':
+        # 🟢 SE AGREGÓ "Parámetros de Venta" PARA QUE RUTEE CORRECTAMENTE A LA VISTA
+        elif selected in ['Registro de Usuario', 'Parámetros de Venta']:
             if rol_usuario == 'admin':
                 mantenimiento_view.show_mantenimiento(selected)
             else: st.error("Acceso denegado. Solo Administradores.")
