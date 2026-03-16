@@ -47,11 +47,27 @@ class VentaModel:
     @staticmethod
     def get_cuentas(): return ["Yape", "Plin", "BCP", "BBVA", "Efectivo", "MercadoPago", "CULQI"]
     
-    @staticmethod
-    def get_tipos_venta(): return ["DEL_DIA", "SEGUIMIENTO", "RECOMPRA"]
+    @classmethod
+    def get_tipos_venta(cls):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT nombre FROM tipos_venta ORDER BY nombre ASC")
+            return [x[0] for x in cur.fetchall()]
+        except: return ["DEL_DIA", "SEGUIMIENTO"]
+        finally: 
+            if conn: conn.close()
 
-    @staticmethod
-    def get_origen_venta(): return ["Facebook", "Instagram", "Whatsapp", "TikTok", "Sitio Web", "Linkedin", "Master Class"]
+    @classmethod
+    def get_origen_venta(cls):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT nombre FROM origenes_venta ORDER BY nombre ASC")
+            return [x[0] for x in cur.fetchall()]
+        except: return ["Facebook", "Instagram", "Whatsapp"]
+        finally: 
+            if conn: conn.close()
 
     @classmethod
     def get_usuarios_vendedores(cls): 
@@ -165,36 +181,29 @@ class VentaModel:
     # --- 3. OPERACIONES PRINCIPALES DE VENTA ---
     # ==========================================
     @classmethod
-    def registrar_venta_completa(cls, id_cliente, id_usuario, total, saldo, estado, tipo_venta, items_venta, monto_pago, metodo_pago, operacion, observacion, fecha_venta, descuento, fecha_registro):
+    def registrar_venta_completa(cls, id_cliente, id_usuario, total, saldo, estado, tipo_venta, origen_venta, items_venta, monto_pago, metodo_pago, operacion, observacion, fecha_venta, descuento, fecha_registro):
         conn = Database.get_connection()
         try:
             cur = conn.cursor()
-            
-            # La venta nace con el estado que envía la vista (PENDIENTE) y el saldo pendiente es el Total
-            sql_v = "INSERT INTO ventas (cliente_id, usuario_id, total, descuento, saldo_pendiente, estado, tipo_venta, observacion, fecha_venta, fecha_registro) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-            cur.execute(sql_v, (id_cliente, id_usuario, total, descuento, total, estado, tipo_venta, observacion, fecha_venta, fecha_registro))
+            # 🟢 SE AGREGÓ "origen" AL INSERT
+            sql_v = "INSERT INTO ventas (cliente_id, usuario_id, total, descuento, saldo_pendiente, estado, tipo_venta, origen, observacion, fecha_venta, fecha_registro) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            cur.execute(sql_v, (id_cliente, id_usuario, total, descuento, total, estado, tipo_venta, origen_venta, observacion, fecha_venta, fecha_registro))
             venta_id = cur.lastrowid
 
             sql_d = "INSERT INTO detalle_ventas (venta_id, evento_id, precio_unitario, subtotal) VALUES (%s, %s, %s, %s)"
             for item in items_venta:
                 cur.execute(sql_d, (venta_id, item['id'], item['precio_base'], item['subtotal']))
 
-            if float(monto_pago) > 0:
+            if monto_pago > 0:
                 sql_p = "INSERT INTO pagos (venta_id, monto, metodo_pago, nro_operacion, usuario_id, estado, fecha_pago) VALUES (%s, %s, %s, %s, %s, 'PENDIENTE', %s)"
                 cur.execute(sql_p, (venta_id, monto_pago, metodo_pago, operacion, id_usuario, fecha_venta))
 
-            # ACTUALIZACIÓN DE STOCK IGNORANDO ANULADOS
             for item in items_venta:
-                cur.execute("""
-                    UPDATE eventos SET stock_vendido = (
-                        SELECT COUNT(*) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id 
-                        WHERE dv.evento_id = %s AND v.estado != 'ANULADO'
-                    ) WHERE id = %s
-                """, (item['id'], item['id']))
+                cur.execute("UPDATE eventos SET stock_vendido = (SELECT COUNT(*) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id WHERE dv.evento_id = %s AND v.estado != 'ANULADO') WHERE id = %s", (item['id'], item['id']))
                 cur.execute("UPDATE eventos SET estado = CASE WHEN stock_vendido >= stock_maximo AND stock_maximo > 0 THEN 'LLENO' ELSE 'ABIERTO' END WHERE id = %s", (item['id'],))
 
             conn.commit()
-            return True, "Venta registrada con éxito. Enviada a validación."
+            return True, "Venta registrada con éxito y enviada a validación."
         except Exception as e:
             if conn: conn.rollback()
             return False, f"Error BD: {e}"
@@ -209,25 +218,21 @@ class VentaModel:
             cur.execute("SELECT evento_id FROM detalle_ventas WHERE venta_id = %s", (id_venta,))
             eventos_viejos = [row[0] for row in cur.fetchall()]
 
-            sql_v = "UPDATE ventas SET total=%s, descuento=%s, observacion=%s, tipo_venta=%s, fecha_venta=%s, fecha_registro=%s WHERE id=%s"
-            cur.execute(sql_v, (d_ven['precio'], d_ven['descuento'], d_ven['obs'], d_ven['tipo_venta'], d_ven['fecha_venta'], d_ven['fecha_registro'], id_venta))
+            # 🟢 SE AGREGÓ "origen" AL UPDATE
+            sql_v = "UPDATE ventas SET total=%s, descuento=%s, observacion=%s, tipo_venta=%s, origen=%s, fecha_venta=%s, fecha_registro=%s WHERE id=%s"
+            cur.execute(sql_v, (d_ven['precio'], d_ven['descuento'], d_ven['obs'], d_ven['tipo_venta'], d_ven['origen'], d_ven['fecha_venta'], d_ven['fecha_registro'], id_venta))
 
             cur.execute("DELETE FROM detalle_ventas WHERE venta_id = %s", (id_venta,))
             sql_d = "INSERT INTO detalle_ventas (venta_id, evento_id, precio_unitario, subtotal) VALUES (%s, %s, %s, %s)"
             for item in items_venta:
                 cur.execute(sql_d, (id_venta, item['id'], item['precio_base'], item['subtotal']))
 
-            sql_c = "UPDATE clientes SET nombre_completo=%s, celular=%s, email=%s, distrito_id=%s WHERE dni_ruc=%s"
-            cur.execute(sql_c, (d_cli['nombre'], d_cli['celular'], d_cli['email'], d_cli['distrito_id'], d_cli['dni']))
+            sql_c = "UPDATE clientes SET nombre_completo=%s, celular=%s, email=%s, distrito_id=%s, pais_id=1, ciudad_extranjera=%s WHERE dni_ruc=%s"
+            cur.execute(sql_c, (d_cli['nombre'], d_cli['celular'], d_cli['email'], d_cli['distrito_id'], d_cli['ciudad_extranjera'], d_cli['dni']))
 
             eventos_afectados = set(eventos_viejos + [item['id'] for item in items_venta])
             for ev_id in eventos_afectados:
-                cur.execute("""
-                    UPDATE eventos SET stock_vendido = (
-                        SELECT COUNT(*) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id 
-                        WHERE dv.evento_id = %s AND v.estado != 'ANULADO'
-                    ) WHERE id = %s
-                """, (ev_id, ev_id))
+                cur.execute("UPDATE eventos SET stock_vendido = (SELECT COUNT(*) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id WHERE dv.evento_id = %s AND v.estado != 'ANULADO') WHERE id = %s", (ev_id, ev_id))
                 cur.execute("UPDATE eventos SET estado = CASE WHEN stock_vendido >= stock_maximo AND stock_maximo > 0 THEN 'LLENO' ELSE 'ABIERTO' END WHERE id = %s", (ev_id,))
 
             conn.commit()
@@ -500,3 +505,47 @@ class VentaModel:
         except Exception as e: return []
         finally: 
             if conn: conn.close()
+
+    @classmethod
+    def get_lista_paises(cls):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT nombre FROM paises ORDER BY CASE WHEN id = 1 THEN 0 ELSE 1 END, nombre ASC")
+            return [x[0] for x in cur.fetchall()]
+        except: return ["Perú", "Otro"]
+        finally: 
+            if conn: conn.close()
+
+    @classmethod
+    def get_lista_departamentos(cls):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT nombre FROM departamentos ORDER BY nombre ASC")
+            return [x[0] for x in cur.fetchall()]
+        except: return []
+        finally: 
+            if conn: conn.close()
+
+    @classmethod
+    def get_provincias_por_dep(cls, nombre_dep):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT p.nombre FROM provincias p JOIN departamentos d ON p.departamento_id = d.id WHERE d.nombre = %s ORDER BY p.nombre ASC", (nombre_dep,))
+            return [x[0] for x in cur.fetchall()]
+        except: return []
+        finally: 
+            if conn: conn.close()
+
+    @classmethod
+    def get_distritos_por_prov(cls, nombre_prov):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT d.nombre FROM distritos d JOIN provincias p ON d.provincia_id = p.id WHERE p.nombre = %s ORDER BY d.nombre ASC", (nombre_prov,))
+            return [x[0] for x in cur.fetchall()]
+        except: return []
+        finally: 
+            if conn: conn.close()        

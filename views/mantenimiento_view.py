@@ -227,13 +227,10 @@ def show_mantenimiento(sub_menu):
             
             df_evt['Mes_Año'] = df_evt['Fecha'].dt.strftime('%m/%Y')
             
-            # --- TRUCO: Generamos los 12 meses fijos del año para el filtro ---
             año_actual = datetime.now().year
             meses_fijos = [f"{str(m).zfill(2)}/{año_actual}" for m in range(1, 13)]
-            # Juntamos los fijos con los de la base de datos y los ordenamos
             opciones_mes = sorted(list(set(meses_fijos + list(df_evt['Mes_Año'].unique()))))
             
-            # Agregamos 3 columnas para que también puedas filtrar por "Periodo"
             f_col1, f_col2, f_col3 = st.columns(3)
             filtro_mes = f_col1.selectbox("Filtrar por Mes", ["Todos"] + opciones_mes)
             filtro_estado = f_col2.selectbox("Filtrar Estado", ["Todos", "ABIERTO", "LLENO", "CERRADO"])
@@ -241,7 +238,6 @@ def show_mantenimiento(sub_menu):
             opciones_periodos = ["Todos"] + list(df_evt['Periodo'].dropna().unique())
             filtro_periodo = f_col3.selectbox("Filtrar por Periodo", opciones_periodos)
             
-            # Aplicar filtros
             if filtro_mes != "Todos": df_evt = df_evt[df_evt['Mes_Año'] == filtro_mes]
             if filtro_estado != "Todos": df_evt = df_evt[df_evt['Estado'] == filtro_estado]
             if filtro_periodo != "Todos": df_evt = df_evt[df_evt['Periodo'] == filtro_periodo]
@@ -250,7 +246,6 @@ def show_mantenimiento(sub_menu):
             
             cols_show = ['ID', 'Fecha', 'Evento', 'Periodo', 'Curso', 'Turno', 'Modalidad', 'Inscritos', 'Aforo', 'Estado']
             
-            # Agregamos altura (height=500) para ver más registros de golpe
             event = st.dataframe(df_evt[cols_show], use_container_width=True, height=500, hide_index=True, selection_mode="single-row", on_select="rerun")
             
             if len(event.selection.rows) > 0:
@@ -341,7 +336,6 @@ def show_mantenimiento(sub_menu):
             
             cols_show = ['ID', 'Nombre', 'Inicio', 'Fin', 'Estado_Visual']
             
-            # Agregamos altura para mostrar los 12 meses de golpe sin que corte la tabla
             event = st.dataframe(df_per[cols_show], use_container_width=True, height=500, hide_index=True, selection_mode="single-row", on_select="rerun")
             
             if len(event.selection.rows) > 0:
@@ -354,7 +348,56 @@ def show_mantenimiento(sub_menu):
                     else: st.error(msg)
         else: st.info("No hay periodos registrados.")
 
-    # 🛠️ NUEVO MÓDULO: MI PERFIL (Solo para no-admins)
+    # 🟢 NUEVO MÓDULO: ORÍGENES Y TIPOS DE VENTA (Parámetros)
+    elif sub_menu == 'Parámetros de Venta':
+        st.markdown("Gestión de las listas desplegables para el registro de ventas.")
+        col_t1, col_t2 = st.columns(2)
+        
+        # --- COLUMNA 1: ORÍGENES DE VENTA ---
+        with col_t1:
+            st.markdown("### 📱 Orígenes de Venta")
+            with st.form("form_nuevo_origen"):
+                n_origen = st.text_input("Nuevo Origen", placeholder="Ej: Publicidad Google")
+                if st.form_submit_button("➕ Añadir Origen"):
+                    if n_origen:
+                        ok, msg = MantenimientoModel.agregar_parametro("origenes_venta", n_origen)
+                        if ok: st.success(msg); st.rerun()
+                        else: st.error(msg)
+            
+            datos_ori = MantenimientoModel.get_parametros("origenes_venta")
+            if datos_ori:
+                df_ori = pd.DataFrame(datos_ori)
+                evt_ori = st.dataframe(df_ori, use_container_width=True, hide_index=True, selection_mode="single-row")
+                if len(evt_ori.selection.rows) > 0:
+                    id_borrar = df_ori.iloc[evt_ori.selection.rows[0]]['id']
+                    if st.button("🗑️ Borrar Origen Seleccionado", key="btn_del_ori"):
+                        ok, msg = MantenimientoModel.eliminar_parametro("origenes_venta", int(id_borrar))
+                        if ok: st.success(msg); st.rerun()
+                        else: st.error(msg)
+        
+        # --- COLUMNA 2: TIPOS DE VENTA ---
+        with col_t2:
+            st.markdown("### 🛒 Tipos de Venta")
+            with st.form("form_nuevo_tipo"):
+                n_tipo = st.text_input("Nuevo Tipo", placeholder="Ej: VIP, Corporativo")
+                if st.form_submit_button("➕ Añadir Tipo"):
+                    if n_tipo:
+                        ok, msg = MantenimientoModel.agregar_parametro("tipos_venta", n_tipo)
+                        if ok: st.success(msg); st.rerun()
+                        else: st.error(msg)
+            
+            datos_tip = MantenimientoModel.get_parametros("tipos_venta")
+            if datos_tip:
+                df_tip = pd.DataFrame(datos_tip)
+                evt_tip = st.dataframe(df_tip, use_container_width=True, hide_index=True, selection_mode="single-row")
+                if len(evt_tip.selection.rows) > 0:
+                    id_borrar_t = df_tip.iloc[evt_tip.selection.rows[0]]['id']
+                    if st.button("🗑️ Borrar Tipo Seleccionado", key="btn_del_tip"):
+                        ok, msg = MantenimientoModel.eliminar_parametro("tipos_venta", int(id_borrar_t))
+                        if ok: st.success(msg); st.rerun()
+                        else: st.error(msg)
+
+    # 🛠️ MÓDULO: MI PERFIL
     elif sub_menu == 'Mi Perfil':
         nombre_usuario = st.session_state.get('usuario')
         mi_data = MantenimientoModel.get_usuario_por_login(nombre_usuario)

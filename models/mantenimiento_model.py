@@ -355,3 +355,38 @@ class MantenimientoModel:
             return False, "Error: Este periodo ya tiene eventos asignados."
         finally:
             if conn: conn.close()
+
+    @classmethod
+    def get_parametros(cls, tabla):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute(f"SELECT * FROM {tabla} ORDER BY nombre ASC")
+            return cur.fetchall()
+        except: return []
+        finally: 
+            if conn: conn.close()
+
+    @classmethod
+    def agregar_parametro(cls, tabla, nombre):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(f"INSERT INTO {tabla} (nombre) VALUES (%s)", (nombre,))
+            conn.commit()
+            return True, "✅ Registro agregado correctamente."
+        except: return False, "⚠️ Error: El nombre ya existe o hay un problema de conexión."
+        finally: 
+            if conn: conn.close()
+
+    @classmethod
+    def eliminar_parametro(cls, tabla, id_param):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(f"DELETE FROM {tabla} WHERE id = %s", (id_param,))
+            conn.commit()
+            return True, "✅ Registro eliminado."
+        except: return False, "⚠️ Error al eliminar. Es posible que ya esté en uso en alguna venta."
+        finally: 
+            if conn: conn.close()

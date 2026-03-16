@@ -8,9 +8,36 @@ from datetime import datetime, date
 import pytz
 
 zona_peru = pytz.timezone('America/Lima')
-fecha_actual = datetime.now(zona_peru)
 
-# --- 1. FUNCIONES DIALOG (NUEVO FLUJO SEPARADO) ---
+# --- 1. FUNCIONES DIALOG ---
+
+@st.dialog("🌍 Ubicación del Cliente")
+def modal_ubicacion():
+    pais = st.selectbox("País", VentaModel.get_lista_paises())
+    
+    if pais == "Perú":
+        c1, c2, c3 = st.columns(3)
+        dep = c1.selectbox("Departamento", VentaModel.get_lista_departamentos())
+        prov = c2.selectbox("Provincia", VentaModel.get_provincias_por_dep(dep))
+        dist = c3.selectbox("Distrito", VentaModel.get_distritos_por_prov(prov))
+        
+        if st.button("💾 Confirmar", type="primary", use_container_width=True):
+            st.session_state['form_data']['pais'] = pais
+            st.session_state['form_data']['departamento'] = dep
+            st.session_state['form_data']['provincia'] = prov
+            st.session_state['form_data']['distrito'] = dist
+            st.session_state['form_data']['ciudad_ext'] = ""
+            st.rerun()
+    else:
+        st.info("Para extranjeros, escriba la ciudad, estado o región manualmente.")
+        ciudad = st.text_input("Ciudad / Región / Estado")
+        if st.button("💾 Confirmar", type="primary", use_container_width=True):
+            st.session_state['form_data']['pais'] = pais
+            st.session_state['form_data']['departamento'] = ""
+            st.session_state['form_data']['provincia'] = ""
+            st.session_state['form_data']['distrito'] = None
+            st.session_state['form_data']['ciudad_ext'] = ciudad
+            st.rerun()
 
 @st.dialog("➕ Registrar Nueva Cuota")
 def registrar_cuota_dialog(id_venta, cliente, deuda_actual, total_venta, pagado_anterior):
@@ -43,8 +70,6 @@ def registrar_cuota_dialog(id_venta, cliente, deuda_actual, total_venta, pagado_
     </div>
     """
     st.markdown(html_stats, unsafe_allow_html=True)
-    
-    st.markdown("### 💰 Ingresar Abono")
     
     c1, c2 = st.columns(2)
     fecha_pago_input = c1.date_input("📅 Fecha de Pago (Real)", value=fecha_actual.date())
@@ -247,8 +272,8 @@ def buscar_cliente_bd(valor, por_dni=True):
 
 # --- 3. VISTA PRINCIPAL ---
 def show_ordenes(sub_menu="Registrar Venta"):
-    cargar_css_elegante()
     fecha_actual = datetime.now(zona_peru)
+    cargar_css_elegante()
 
     if 'form_key_counter' not in st.session_state:
         st.session_state['form_key_counter'] = 0
@@ -258,8 +283,9 @@ def show_ordenes(sub_menu="Registrar Venta"):
         "fecha_registro": fecha_actual.date(),
         "dni": "", "cliente": "", "email": "", 
         "celular": "", "distrito": None, "curso": [], "turno": "", 
-        "monto": 0.0, "dscto": 0.0, "a_cuenta": 0.0, "tipo": None, 
-        "cuenta": None, "vendedor": None, "nota": "", "operacion": ""
+        "monto": 0.0, "dscto": 0.0, "a_cuenta": 0.0, "tipo": None, "origen": None, 
+        "cuenta": None, "vendedor": None, "nota": "", "operacion": "",
+        "pais": "Perú", "departamento": "", "provincia": "", "ciudad_ext": ""
     }
 
     if 'edit_id' not in st.session_state: st.session_state['edit_id'] = None
@@ -297,13 +323,11 @@ def show_ordenes(sub_menu="Registrar Venta"):
     usuario_actual = st.session_state.get('usuario', '')
     rol_actual = st.session_state.get('rol', '').lower()
 
-    # 🟢 MODIFICACIÓN: Filtro general unificado para que el Asesor aplique en todas las pestañas
     with st.expander("🔍 Filtros de Búsqueda", expanded=(sub_menu != "Registrar Venta")):
         c1, c2, c3, c4 = st.columns(4)
         f_ini = c1.date_input("Desde (F. Reg)", fecha_actual.date(), key=f"ini_{key_suffix}")
         f_fin = c2.date_input("Hasta (F. Reg)", fecha_actual.date(), key=f"fin_{key_suffix}")
         
-        # Lógica de bloqueo de vendedor si no es admin/coordinador/auditor
         lista_filtro_asesores = ["Todos"] + lista_vendedores
         idx_asesor_filtro = 0
         disable_asesor_filtro = False
@@ -325,7 +349,6 @@ def show_ordenes(sub_menu="Registrar Venta"):
             f_cuenta = c6.selectbox("Cuenta", ["Todos"] + VentaModel.get_cuentas(), key=f"cta_{key_suffix}")
             f_curso = c7.selectbox("Curso", lista_cursos, key=f"cur_{key_suffix}")
 
-    # Obtenemos la data ya filtrada por vendedor y fechas
     data_raw = VentaModel.get_historial_filtrado(f_ini, f_fin, f_asesor, f_tipo)
     df_hist = pd.DataFrame(data_raw)
     df_show = pd.DataFrame() 
@@ -338,15 +361,13 @@ def show_ordenes(sub_menu="Registrar Venta"):
         if 'por_validar' not in df_hist.columns: df_hist['por_validar'] = 0.0
         if 'descuento' not in df_hist.columns: df_hist['descuento'] = 0.0
 
-        # Cálculo matemático correcto para el saldo
         df_hist['saldo'] = df_hist['monto'] - df_hist['ingreso'] - df_hist['por_validar']
         df_hist['saldo'] = df_hist['saldo'].apply(lambda x: max(0.0, x))
 
-        # Filtros estrictos para las pestañas
         if sub_menu == "Ventas por Validar":
-            df_hist = df_hist[df_hist['por_validar'] > 0]
+            df_hist = df_hist[~df_hist['estado'].isin(['PAGADO', 'ANULADO'])]
         elif sub_menu == "Ventas Validadas":
-            df_hist = df_hist[(df_hist['por_validar'] == 0) & (df_hist['estado'].isin(['PAGADO', 'PARCIAL']))]
+            df_hist = df_hist[df_hist['estado'].isin(['PAGADO', 'PARCIAL'])]
         
         if f_curso != "Todos":
             nombre_curso_filtro = f_curso.split(" [")[0]
@@ -364,27 +385,21 @@ def show_ordenes(sub_menu="Registrar Venta"):
         })
 
     with kpi_placeholder:
-        # 🟢 MODIFICACIÓN: Los KPIs ahora se calculan dinámicamente con los filtros aplicados y bloqueados por vendedor
         if sub_menu == "Registrar Venta":
             try:
                 hoy = fecha_actual.date()
-                # Le pasamos f_asesor para que respete si es Vendedor (bloqueado) o Admin (filtro activo)
-                data_hoy = VentaModel.get_historial_filtrado(hoy, hoy, f_asesor, 'Todos')
+                data_hoy = VentaModel.get_historial_filtrado(hoy, hoy, 'Todos', 'Todos')
                 df_hoy = pd.DataFrame(data_hoy)
+                
+                if rol_actual not in ['admin', 'coordinador', 'auditor']:
+                    df_hoy = df_hoy[df_hoy['vendedor'] == usuario_actual]
 
                 if not df_hoy.empty:
-                    df_hoy['por_validar'] = df_hoy['por_validar'].fillna(0.0)
-                    df_hoy['ingreso'] = df_hoy['ingreso'].fillna(0.0)
-                    df_hoy['monto'] = df_hoy['monto'].fillna(0.0)
-                    
                     df_hoy_g = df_hoy.groupby('id', as_index=False).agg({'monto': 'first', 'saldo': 'first', 'estado': 'first', 'ingreso': 'first', 'por_validar':'first'})
-                    
                     df_hoy_g['saldo_real'] = df_hoy_g['monto'] - df_hoy_g['ingreso'] - df_hoy_g['por_validar']
                     df_hoy_g['saldo_real'] = df_hoy_g['saldo_real'].apply(lambda x: max(0.0, x))
                     
-                    # Solo contamos las que ya no son PENDIENTES de validación o anuladas
                     df_hoy_validas = df_hoy_g[df_hoy_g['estado'].isin(['PAGADO', 'PARCIAL'])]
-                    
                     total_ventas_hoy_cnt = len(df_hoy_validas)
                     monto_ventas_hoy = round(float(df_hoy_validas['monto'].sum()), 2)
                     por_cobrar_hoy = round(float(df_hoy_validas['saldo_real'].sum()), 2)
@@ -401,21 +416,22 @@ def show_ordenes(sub_menu="Registrar Venta"):
             c1.metric("FECHA SISTEMA", fecha_actual.strftime("%d/%m/%Y")) 
             c2.metric("VENTAS HOY", total_ventas_hoy_cnt)
             c3.metric("MONTO VENTAS HOY", f"S/ {monto_ventas_hoy:,.2f}")
-            c4.metric("POR COBRAR (HOY)", f"S/ {por_cobrar_hoy:,.2f}")
+            kpis_base = VentaModel.get_kpis_hoy()
+            c4.metric("POR COBRAR TOTAL", f"S/ {float(kpis_base['por_cobrar']):,.2f}")
         
         elif sub_menu == "Ventas por Validar":
             k1, k2 = st.columns(2)
             val_cnt = len(df_show) if not df_show.empty else 0
-            val_deuda = round(float(df_show['por_validar'].sum()), 2) if not df_show.empty else 0.0
+            val_deuda = round(float(df_show['saldo'].sum()), 2) if not df_show.empty else 0.0
             k1.metric("CLIENTES POR VALIDAR", val_cnt)
-            k2.metric("DINERO EN EL LIMBO (Por Validar)", f"S/ {val_deuda:,.2f}")
+            k2.metric("TOTAL POR COBRAR", f"S/ {val_deuda:,.2f}")
 
         elif sub_menu == "Ventas Validadas":
             k1, k2 = st.columns(2)
             val_cnt = len(df_show) if not df_show.empty else 0
-            val_total = round(float(df_show['ingreso'].sum()), 2) if not df_show.empty else 0.0
-            k1.metric("VENTAS CON PAGOS VALIDADOS", val_cnt)
-            k2.metric("DINERO REAL EN CAJA", f"S/ {val_total:,.2f}")
+            val_total = round(float(df_show['monto'].sum()), 2) if not df_show.empty else 0.0
+            k1.metric("VENTAS VALIDADAS", val_cnt)
+            k2.metric("DINERO VALIDADO", f"S/ {val_total:,.2f}")
 
     # --- FORMULARIO DE REGISTRO MULTI-CURSO ---
     if sub_menu == "Registrar Venta" or st.session_state['is_editing']:
@@ -483,13 +499,38 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                 else: st.toast("Nombre no encontrado", icon="⚠️")
                         st.markdown('</div>', unsafe_allow_html=True)
 
-                c_row3 = st.columns([1, 1, 1])
+                c_row3 = st.columns([1, 1, 1.5])
                 cel_input = c_row3[0].text_input("Celular", value=st.session_state['form_data']["celular"], placeholder="Ej: 987654321")
                 email_input = c_row3[1].text_input("Email", value=st.session_state['form_data']["email"], placeholder="correo@ejemplo.com")
-                lista_distritos = VentaModel.get_lista_distritos()
-                curr_dist = st.session_state['form_data'].get("distrito")
-                idx_dist = lista_distritos.index(curr_dist) if curr_dist in lista_distritos else None
-                dist_input = c_row3[2].selectbox("Distrito", lista_distritos, index=idx_dist, placeholder="Seleccione...")
+                
+                with c_row3[2]:
+                    ub_pais = st.session_state['form_data'].get('pais', 'Perú')
+                    ub_dep = st.session_state['form_data'].get('departamento', '')
+                    ub_prov = st.session_state['form_data'].get('provincia', '')
+                    ub_dist = st.session_state['form_data'].get('distrito', '')
+                    ub_ciud = st.session_state['form_data'].get('ciudad_ext', '')
+
+                    if ub_pais == "Perú":
+                        if ub_dep and ub_prov and ub_dist:
+                            texto_ubi = f"{ub_dep} - {ub_prov} - {ub_dist}"
+                        elif ub_dist:
+                            texto_ubi = f"{ub_dist}"
+                        else:
+                            texto_ubi = "Ubicación no seleccionada"
+                    else:
+                        if ub_ciud:
+                            texto_ubi = f"{ub_pais} - {ub_ciud}"
+                        else:
+                            texto_ubi = f"{ub_pais} (Sin especificar)"
+
+                    c_ubi1, c_ubi2 = st.columns([4, 1])
+                    c_ubi1.text_input("Ubicación", value=texto_ubi, disabled=True)
+                    with c_ubi2:
+                        st.markdown('<div class="small-btn">', unsafe_allow_html=True)
+                        if st.button("🌎", help="Cambiar ubicación", use_container_width=True):
+                            modal_ubicacion()
+                        st.markdown('</div>', unsafe_allow_html=True)
+
                 st.markdown("<hr class='form-divider'>", unsafe_allow_html=True)
 
                 lista_seleccionados = st.session_state['form_data'].get("curso", [])
@@ -533,16 +574,22 @@ def show_ordenes(sub_menu="Registrar Venta"):
                     else: 
                         st.metric("Saldo Pendiente", f"S/ {saldo_calc:.2f}", delta="⚠️ Por Validar", delta_color="off")
                 
-                c_pag1, c_pag2, c_pag3, c_pag4 = st.columns(4)
+                # 🟢 AÑADIMOS EL ORIGEN COMO UNA 5TA COLUMNA DINÁMICA
+                c_pag1, c_pag2, c_pag3, c_pag4, c_pag5 = st.columns(5)
+                
                 t_val_v = st.session_state['form_data'].get("tipo")
                 t_idx = VentaModel.get_tipos_venta().index(t_val_v) if t_val_v in VentaModel.get_tipos_venta() else None
-                tipo_input = c_pag1.selectbox("Tipo de Venta", VentaModel.get_tipos_venta(), index=t_idx, placeholder="Seleccione...")
+                tipo_input = c_pag1.selectbox("Tipo Venta", VentaModel.get_tipos_venta(), index=t_idx, placeholder="Seleccione...")
+                
+                o_val_v = st.session_state['form_data'].get("origen")
+                o_idx = VentaModel.get_origen_venta().index(o_val_v) if o_val_v in VentaModel.get_origen_venta() else None
+                origen_input = c_pag2.selectbox("Origen", VentaModel.get_origen_venta(), index=o_idx, placeholder="Seleccione...")
                 
                 cta_val = st.session_state['form_data'].get("cuenta")
                 cta_idx = VentaModel.get_cuentas().index(cta_val) if cta_val in VentaModel.get_cuentas() else None
-                cuenta_input = c_pag2.selectbox("Método de Pago", VentaModel.get_cuentas(), index=cta_idx, placeholder="Seleccione...")
+                cuenta_input = c_pag3.selectbox("Método", VentaModel.get_cuentas(), index=cta_idx, placeholder="Seleccione...")
                 
-                op_input = c_pag3.text_input("N° Operación (Inicial)", value=st.session_state['form_data'].get("operacion", ""))
+                op_input = c_pag4.text_input("N° Operación", value=st.session_state['form_data'].get("operacion", ""))
                 
                 if not st.session_state['is_editing']:
                     if rol_actual in ['admin', 'coordinador']: 
@@ -555,7 +602,8 @@ def show_ordenes(sub_menu="Registrar Venta"):
                     v_idx = lista_vendedores.index(v_val) if v_val in lista_vendedores else None
                 
                 disable_vendedor_form = False if rol_actual in ['admin', 'coordinador'] else True
-                vend_nombre_input = c_pag4.selectbox("Vendedor Responsable", lista_vendedores, index=v_idx, disabled=disable_vendedor_form, placeholder="Seleccione...")
+                vend_nombre_input = c_pag5.selectbox("Vendedor", lista_vendedores, index=v_idx, disabled=disable_vendedor_form, placeholder="Seleccione...")
+                
                 st.markdown("<hr class='form-divider'>", unsafe_allow_html=True)
                 
                 obs_input = st.text_input("Observaciones / Detalles Adicionales", value=st.session_state['form_data']["nota"], placeholder="Información extra de la venta...")
@@ -574,18 +622,24 @@ def show_ordenes(sub_menu="Registrar Venta"):
                             deshabilitar_boton = True
                             break
                 
+                pais_input = st.session_state['form_data'].get('pais', 'Perú')
+                dist_input = st.session_state['form_data'].get('distrito')
+                ciudad_ext_input = st.session_state['form_data'].get('ciudad_ext', '')
+
                 if st.button(label_btn, type="primary", use_container_width=True, disabled=deshabilitar_boton):
                     st.session_state['form_data'].update({
                         "fecha_venta": fecha_v_input, "fecha_registro": fecha_r_input, "dni": dni_input, "cliente": nom_input, 
-                        "celular": cel_input, "distrito": dist_input, "curso": curso_input, 
+                        "celular": cel_input, "curso": curso_input, 
                         "turno": turno_input, "email": email_input, "monto": monto_input, 
-                        "dscto": dscto_input, "a_cuenta": acuenta_input, "tipo": tipo_input, 
+                        "dscto": dscto_input, "a_cuenta": acuenta_input, "tipo": tipo_input, "origen": origen_input,
                         "cuenta": cuenta_input, "vendedor": vend_nombre_input, "nota": obs_input,
                         "operacion": op_input
                     })
                     
-                    if not nom_input or len(curso_input) == 0 or not dist_input or not tipo_input or not cuenta_input or not vend_nombre_input: 
-                        st.error("⚠️ Faltan datos obligatorios (Debe elegir al menos un curso).")
+                    if not nom_input or len(curso_input) == 0 or not tipo_input or not origen_input or not cuenta_input or not vend_nombre_input: 
+                        st.error("⚠️ Faltan datos obligatorios (Cliente, Cursos, Tipo y Origen de Venta).")
+                    elif pais_input == "Perú" and not dist_input:
+                        st.error("⚠️ Por favor, seleccione la Ubicación (Departamento/Provincia/Distrito) haciendo clic en el botón del Mundo 🌎.")
                     elif round(float(acuenta_input), 2) < 0:
                         st.error("⚠️ El monto 'A Cuenta' no puede ser negativo.")
                     elif round(float(acuenta_input), 2) > round(float(total_calc), 2):
@@ -607,10 +661,11 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                 suma_distribuida += subtotal_item
                                 items_venta.append({'id': info['id'], 'precio_base': info['precio'], 'subtotal': subtotal_item})
 
-                            dist_id = VentaModel.get_id_distrito(dist_input); id_usuario_final = mapa_vendedores.get(vend_nombre_input, 1)
-                            d_cli = {'dni': dni_input, 'nombre': nom_input, 'celular': cel_input, 'email': email_input, 'distrito_id': dist_id}
+                            dist_id = VentaModel.get_id_distrito(dist_input) if dist_input else None
+                            id_usuario_final = mapa_vendedores.get(vend_nombre_input, 1)
                             
-                            d_ven = {'precio': total_calc, 'descuento': dscto_input, 'obs': obs_input, 'tipo_venta': tipo_input, 'fecha_venta': fecha_v_input, 'fecha_registro': fecha_r_input}
+                            d_cli = {'dni': dni_input, 'nombre': nom_input, 'celular': cel_input, 'email': email_input, 'distrito_id': dist_id, 'pais': pais_input, 'ciudad_extranjera': ciudad_ext_input}
+                            d_ven = {'precio': total_calc, 'descuento': dscto_input, 'obs': obs_input, 'tipo_venta': tipo_input, 'origen': origen_input, 'fecha_venta': fecha_v_input, 'fecha_registro': fecha_r_input}
                             d_pag = {'monto': acuenta_input, 'metodo': cuenta_input}
                             
                             if st.session_state['is_editing']:
@@ -636,7 +691,8 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                 except: st.error("Error al registrar el cliente en BD"); st.stop()
                                 
                                 estado_calculado = 'PENDIENTE'
-                                ok, msg = VentaModel.registrar_venta_completa(id_cliente, id_usuario_final, total_calc, saldo_calc, estado_calculado, tipo_input, items_venta, acuenta_input, cuenta_input, op_input, obs_input, fecha_v_input, dscto_input, fecha_r_input)
+                                # 🟢 SE PASA ORIGEN INPUT COMO PARAMETRO EXTRA
+                                ok, msg = VentaModel.registrar_venta_completa(id_cliente, id_usuario_final, total_calc, saldo_calc, estado_calculado, tipo_input, origen_input, items_venta, acuenta_input, cuenta_input, op_input, obs_input, fecha_v_input, dscto_input, fecha_r_input)
                                 if ok: 
                                     st.success("✅ ¡Venta Registrada!")
                                     st.session_state['form_data'] = reset_dict.copy()
@@ -759,12 +815,15 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                 "celular": row_first.get("celular", "") if pd.notna(row_first.get("celular")) else "",
                                 "email": row_first.get("email", "") if pd.notna(row_first.get("email")) else "",
                                 "distrito": row_first.get("distrito", None) if pd.notna(row_first.get("distrito")) else None,
+                                "pais": row_first.get("pais", "Perú") if "pais" in row_first else "Perú",
+                                "ciudad_ext": row_first.get("ciudad_extranjera", "") if "ciudad_extranjera" in row_first and pd.notna(row_first.get("ciudad_extranjera")) else "",
                                 "curso": curso_display_matches,
                                 "turno": " | ".join(list(set([mapa_eventos[c]['turno'] for c in curso_display_matches if c in mapa_eventos]))), 
                                 "monto": precio_base_catalogo,
                                 "dscto": float(row_first.get("descuento", 0.0)),
                                 "a_cuenta": float(row_first.get("ingreso", 0.0)) + float(row_first.get("por_validar", 0.0)),
                                 "tipo": row_first.get("tipo_venta", None),
+                                "origen": row_first.get("origen", None), # 🟢 SE RECUPERA EL ORIGEN AL EDITAR
                                 "cuenta": row_first.get("cuenta", None),
                                 "vendedor": row_first.get("vendedor", None),
                                 "nota": row_first.get("observacion", "") if pd.notna(row_first.get("observacion")) else "",
