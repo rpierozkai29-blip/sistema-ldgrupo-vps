@@ -17,7 +17,6 @@ def seed_database():
         ctx.verify_mode = ssl.CERT_NONE
 
         print("🔌 Conectando a la base de datos usando tus credenciales oficiales...")
-        # USAMOS TU CONEXIÓN OFICIAL (Ya tiene la clave y la BD correcta)
         conn = Database.get_connection()
         if not conn:
             print("❌ No se pudo conectar a la base de datos. Verifica tu config/database.py")
@@ -49,29 +48,38 @@ def seed_database():
         # ---------------------------------------------------------
         # 2. POBLAR UBIGEO DEL PERÚ (1,874 Distritos Reales)
         # ---------------------------------------------------------
-        print("🇵🇪 Descargando Ubigeo Oficial del Perú (1,874 Distritos)...")
-        url_ubigeo = "https://raw.githubusercontent.com/joseluisq/ubigeos-peru/master/ubigeo-peru.json"
-        req_u = urllib.request.urlopen(url_ubigeo, context=ctx)
-        ubigeo_raw = json.loads(req_u.read())
-        
-        mapa_dep = {}; mapa_prov = {}
+        print("🇵🇪 Descargando Departamentos del Perú...")
+        req_d = urllib.request.urlopen("https://raw.githubusercontent.com/joseluisq/ubigeos-peru/master/json/departamentos.json", context=ctx)
+        deps_raw = json.loads(req_d.read())
+
+        print("🇵🇪 Descargando Provincias del Perú...")
+        req_pr = urllib.request.urlopen("https://raw.githubusercontent.com/joseluisq/ubigeos-peru/master/json/provincias.json", context=ctx)
+        provs_raw = json.loads(req_pr.read())
+
+        print("🇵🇪 Descargando Distritos del Perú...")
+        req_di = urllib.request.urlopen("https://raw.githubusercontent.com/joseluisq/ubigeos-peru/master/json/distritos.json", context=ctx)
+        dists_raw = json.loads(req_di.read())
         
         print("🏗️ Armando estructura de Departamentos, Provincias y Distritos...")
-        for row in ubigeo_raw:
-            cc_dd = row['cc_dd']; cc_pp = row['cc_pp']; cc_di = row['cc_di']
-            nombre = row['desc_ubigeo'].title()
+        # Guardar IDs de departamentos
+        mapa_deps = {}
+        for d in deps_raw:
+            cursor.execute("INSERT INTO departamentos (nombre) VALUES (%s)", (d['nombre_ubigeo'].title(),))
+            mapa_deps[d['id_ubigeo']] = cursor.lastrowid
+            
+        # Guardar IDs de provincias y vincularlas
+        mapa_provs = {}
+        for p in provs_raw:
+            id_dep = mapa_deps.get(p['id_padre_ubigeo'])
+            if id_dep:
+                cursor.execute("INSERT INTO provincias (departamento_id, nombre) VALUES (%s, %s)", (id_dep, p['nombre_ubigeo'].title()))
+                mapa_provs[p['id_ubigeo']] = cursor.lastrowid
 
-            if cc_pp == "00" and cc_di == "00":
-                cursor.execute("INSERT INTO departamentos (nombre) VALUES (%s)", (nombre,))
-                mapa_dep[cc_dd] = cursor.lastrowid
-            elif cc_pp != "00" and cc_di == "00":
-                dep_id = mapa_dep[cc_dd]
-                cursor.execute("INSERT INTO provincias (departamento_id, nombre) VALUES (%s, %s)", (dep_id, nombre))
-                mapa_prov[f"{cc_dd}{cc_pp}"] = cursor.lastrowid
-            elif cc_pp != "00" and cc_di != "00":
-                prov_id = mapa_prov.get(f"{cc_dd}{cc_pp}")
-                if prov_id:
-                    cursor.execute("INSERT INTO distritos (provincia_id, nombre) VALUES (%s, %s)", (prov_id, nombre))
+        # Insertar distritos vinculados a su provincia
+        for di in dists_raw:
+            id_prov = mapa_provs.get(di['id_padre_ubigeo'])
+            if id_prov:
+                cursor.execute("INSERT INTO distritos (provincia_id, nombre) VALUES (%s, %s)", (id_prov, di['nombre_ubigeo'].title()))
 
         conn.commit()
         print("✅ ¡Éxito Total! Base de datos actualizada con ubicaciones reales.")
