@@ -61,22 +61,24 @@ def seed_database():
         dists_raw = json.loads(req_di.read())
         
         print("🏗️ Armando estructura de Departamentos, Provincias y Distritos...")
+        
+        # 🟢 CORRECCIÓN APLICADA: Agregamos .values() en los tres bucles
         # Guardar IDs de departamentos
         mapa_deps = {}
-        for d in deps_raw:
+        for d in deps_raw.values():
             cursor.execute("INSERT INTO departamentos (nombre) VALUES (%s)", (d['nombre_ubigeo'].title(),))
             mapa_deps[d['id_ubigeo']] = cursor.lastrowid
             
         # Guardar IDs de provincias y vincularlas
         mapa_provs = {}
-        for p in provs_raw:
+        for p in provs_raw.values():
             id_dep = mapa_deps.get(p['id_padre_ubigeo'])
             if id_dep:
                 cursor.execute("INSERT INTO provincias (departamento_id, nombre) VALUES (%s, %s)", (id_dep, p['nombre_ubigeo'].title()))
                 mapa_provs[p['id_ubigeo']] = cursor.lastrowid
 
         # Insertar distritos vinculados a su provincia
-        for di in dists_raw:
+        for di in dists_raw.values():
             id_prov = mapa_provs.get(di['id_padre_ubigeo'])
             if id_prov:
                 cursor.execute("INSERT INTO distritos (provincia_id, nombre) VALUES (%s, %s)", (id_prov, di['nombre_ubigeo'].title()))

@@ -348,7 +348,7 @@ def show_mantenimiento(sub_menu):
                     else: st.error(msg)
         else: st.info("No hay periodos registrados.")
 
-    # 🟢 NUEVO MÓDULO: ORÍGENES Y TIPOS DE VENTA (Parámetros)
+# 🟢 NUEVO MÓDULO: ORÍGENES Y TIPOS DE VENTA (Parámetros)
     elif sub_menu == 'Parámetros de Venta':
         st.markdown("Gestión de las listas desplegables para el registro de ventas.")
         col_t1, col_t2 = st.columns(2)
@@ -367,8 +367,10 @@ def show_mantenimiento(sub_menu):
             datos_ori = MantenimientoModel.get_parametros("origenes_venta")
             if datos_ori:
                 df_ori = pd.DataFrame(datos_ori)
-                evt_ori = st.dataframe(df_ori, use_container_width=True, hide_index=True, selection_mode="single-row")
-                if len(evt_ori.selection.rows) > 0:
+                evt_ori = st.dataframe(df_ori, use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun")
+                
+                # Validación si no se ha seleccionado nada
+                if hasattr(evt_ori, 'selection') and len(evt_ori.selection.rows) > 0:
                     id_borrar = df_ori.iloc[evt_ori.selection.rows[0]]['id']
                     if st.button("🗑️ Borrar Origen Seleccionado", key="btn_del_ori"):
                         ok, msg = MantenimientoModel.eliminar_parametro("origenes_venta", int(id_borrar))
@@ -389,8 +391,10 @@ def show_mantenimiento(sub_menu):
             datos_tip = MantenimientoModel.get_parametros("tipos_venta")
             if datos_tip:
                 df_tip = pd.DataFrame(datos_tip)
-                evt_tip = st.dataframe(df_tip, use_container_width=True, hide_index=True, selection_mode="single-row")
-                if len(evt_tip.selection.rows) > 0:
+                evt_tip = st.dataframe(df_tip, use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun")
+                
+                # Validación si no se ha seleccionado nada
+                if hasattr(evt_tip, 'selection') and len(evt_tip.selection.rows) > 0:
                     id_borrar_t = df_tip.iloc[evt_tip.selection.rows[0]]['id']
                     if st.button("🗑️ Borrar Tipo Seleccionado", key="btn_del_tip"):
                         ok, msg = MantenimientoModel.eliminar_parametro("tipos_venta", int(id_borrar_t))
