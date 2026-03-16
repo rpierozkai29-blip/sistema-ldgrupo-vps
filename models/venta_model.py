@@ -37,6 +37,58 @@ class VentaModel:
             except: pass
             finally: conn.close()
         return dist_id
+    
+    @classmethod
+    def get_lista_paises(cls):
+        conn = Database.get_connection()
+        if not conn: return ["Perú", "Otro"]
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT nombre FROM paises ORDER BY CASE WHEN id = 1 THEN 0 ELSE 1 END, nombre ASC")
+            res = cur.fetchall()
+            if res: return [x[0] for x in res]
+            return ["Perú", "Otro"] # Salvavidas si la tabla está vacía
+        except: return ["Perú", "Otro"]
+        finally: conn.close()
+
+    @classmethod
+    def get_lista_departamentos(cls):
+        conn = Database.get_connection()
+        if not conn: return ["Lima"]
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT nombre FROM departamentos ORDER BY nombre ASC")
+            res = cur.fetchall()
+            if res: return [x[0] for x in res]
+            return ["Lima"]
+        except: return ["Lima"]
+        finally: conn.close()
+
+    @classmethod
+    def get_provincias_por_dep(cls, nombre_dep):
+        conn = Database.get_connection()
+        if not conn: return ["Lima"]
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT p.nombre FROM provincias p JOIN departamentos d ON p.departamento_id = d.id WHERE d.nombre = %s ORDER BY p.nombre ASC", (nombre_dep,))
+            res = cur.fetchall()
+            if res: return [x[0] for x in res]
+            return ["Lima"]
+        except: return ["Lima"]
+        finally: conn.close()
+
+    @classmethod
+    def get_distritos_por_prov(cls, nombre_prov):
+        conn = Database.get_connection()
+        if not conn: return ["Cercado de Lima"]
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT d.nombre FROM distritos d JOIN provincias p ON d.provincia_id = p.id WHERE p.nombre = %s ORDER BY d.nombre ASC", (nombre_prov,))
+            res = cur.fetchall()
+            if res: return [x[0] for x in res]
+            return ["Cercado de Lima"]
+        except: return ["Cercado de Lima"]
+        finally: conn.close()  
 
     @staticmethod
     def get_turnos(): return ["Mañana", "Tarde", "Noche"]
@@ -504,48 +556,4 @@ class VentaModel:
             return cur.fetchall()
         except Exception as e: return []
         finally: 
-            if conn: conn.close()
-
-    @classmethod
-    def get_lista_paises(cls):
-        conn = Database.get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT nombre FROM paises ORDER BY CASE WHEN id = 1 THEN 0 ELSE 1 END, nombre ASC")
-            return [x[0] for x in cur.fetchall()]
-        except: return ["Perú", "Otro"]
-        finally: 
-            if conn: conn.close()
-
-    @classmethod
-    def get_lista_departamentos(cls):
-        conn = Database.get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT nombre FROM departamentos ORDER BY nombre ASC")
-            return [x[0] for x in cur.fetchall()]
-        except: return []
-        finally: 
-            if conn: conn.close()
-
-    @classmethod
-    def get_provincias_por_dep(cls, nombre_dep):
-        conn = Database.get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT p.nombre FROM provincias p JOIN departamentos d ON p.departamento_id = d.id WHERE d.nombre = %s ORDER BY p.nombre ASC", (nombre_dep,))
-            return [x[0] for x in cur.fetchall()]
-        except: return []
-        finally: 
-            if conn: conn.close()
-
-    @classmethod
-    def get_distritos_por_prov(cls, nombre_prov):
-        conn = Database.get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT d.nombre FROM distritos d JOIN provincias p ON d.provincia_id = p.id WHERE p.nombre = %s ORDER BY d.nombre ASC", (nombre_prov,))
-            return [x[0] for x in cur.fetchall()]
-        except: return []
-        finally: 
-            if conn: conn.close()        
+            if conn: conn.close()     

@@ -1,25 +1,28 @@
-import mysql.connector
 import urllib.request
 import json
 import ssl
+import sys
+import os
 
-# --- CONFIGURACIÓN DE BASE DE DATOS ---
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': '',
-    'database': 'ld' 
-}
+# Esto permite que el script encuentre tu archivo oficial de conexión a la base de datos
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config.database import Database
 
 def seed_database():
     conn = None
     try:
-        # Ignorar certificados SSL para la descarga segura
+        # Ignorar certificados SSL para la descarga segura desde GitHub
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
 
-        conn = mysql.connector.connect(**db_config)
+        print("🔌 Conectando a la base de datos usando tus credenciales oficiales...")
+        # USAMOS TU CONEXIÓN OFICIAL (Ya tiene la clave y la BD correcta)
+        conn = Database.get_connection()
+        if not conn:
+            print("❌ No se pudo conectar a la base de datos. Verifica tu config/database.py")
+            return
+        
         cursor = conn.cursor()
         
         print("🧹 Limpiando tablas antiguas y datos falsos...")
@@ -46,7 +49,7 @@ def seed_database():
         # ---------------------------------------------------------
         # 2. POBLAR UBIGEO DEL PERÚ (1,874 Distritos Reales)
         # ---------------------------------------------------------
-        print("🇵🇪 Descargando Ubigeo Oficial del Perú...")
+        print("🇵🇪 Descargando Ubigeo Oficial del Perú (1,874 Distritos)...")
         url_ubigeo = "https://raw.githubusercontent.com/joseluisq/ubigeos-peru/master/ubigeo-peru.json"
         req_u = urllib.request.urlopen(url_ubigeo, context=ctx)
         ubigeo_raw = json.loads(req_u.read())

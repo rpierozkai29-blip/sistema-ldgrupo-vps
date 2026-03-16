@@ -6,9 +6,8 @@ from views import ordenes_view, reportes_view, login_view, mantenimiento_view, r
 
 st.set_page_config(page_title="Sistema LDGROUP", layout="wide", initial_sidebar_state="expanded")
 
-# ==============================================================================
-# FUNCIÓN PARA EL FONDO DINÁMICO Y ESTILOS GLOBALES
-# ==============================================================================
+# FUNCIÓN CSS DINÁMICO Y ESTILOS GLOBALES
+
 def set_background(image_path, opacity=0.92):
     css_fondo = ""
     if os.path.exists(image_path):
