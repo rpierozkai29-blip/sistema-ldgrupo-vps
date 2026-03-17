@@ -9,6 +9,7 @@ class VentaModel:
     # --- 1. UTILIDADES GENERALES ---
     # ==========================================
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_lista_distritos(cls):
         conn = Database.get_connection()
         nombres = []
@@ -25,6 +26,7 @@ class VentaModel:
         return nombres
 
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_id_distrito(cls, nombre_distrito):
         conn = Database.get_connection()
         dist_id = 1 
@@ -39,6 +41,7 @@ class VentaModel:
         return dist_id
     
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_lista_paises(cls):
         conn = Database.get_connection()
         if not conn: return ["Perú", "Otro"]
@@ -52,6 +55,7 @@ class VentaModel:
         finally: conn.close()
 
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_lista_departamentos(cls):
         conn = Database.get_connection()
         if not conn: return ["Lima"]
@@ -100,6 +104,7 @@ class VentaModel:
     def get_cuentas(): return ["Yape", "Plin", "BCP", "BBVA", "Efectivo", "MercadoPago", "CULQI"]
     
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_tipos_venta(cls):
         conn = Database.get_connection()
         try:
@@ -111,6 +116,7 @@ class VentaModel:
             if conn: conn.close()
 
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_origen_venta(cls):
         conn = Database.get_connection()
         try:
@@ -122,6 +128,7 @@ class VentaModel:
             if conn: conn.close()
 
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_usuarios_vendedores(cls): 
         conn = Database.get_connection()
         res = [] 
@@ -137,6 +144,7 @@ class VentaModel:
         return res
 
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_periodos_activos(cls):
         conn = Database.get_connection()
         if conn:
@@ -154,6 +162,7 @@ class VentaModel:
     # --- 2. GESTIÓN DE EVENTOS / CURSOS ---
     # ==========================================
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_eventos_activos(cls):
         conn = Database.get_connection()
         if conn:
@@ -174,6 +183,7 @@ class VentaModel:
         return []
 
     @classmethod
+    @st.cache_data(ttl=3600)
     def get_lista_eventos_categorias(cls):
         conn = Database.get_connection()
         ev, ca = [], []
@@ -556,4 +566,73 @@ class VentaModel:
             return cur.fetchall()
         except Exception as e: return []
         finally: 
-            if conn: conn.close()     
+            if conn: conn.close()
+
+    # ==========================================
+    # --- 6. EDICIÓN Y ELIMINACIÓN DE PAGOS ---
+    # ==========================================
+    @classmethod
+    def editar_pago_detalle(cls, pago_id, monto, metodo, operacion, fecha_pago):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("UPDATE pagos SET monto=%s, metodo_pago=%s, nro_operacion=%s, fecha_pago=%s WHERE id=%s", (monto, metodo, operacion, fecha_pago, pago_id))
+            cur.execute("SELECT venta_id FROM pagos WHERE id=%s", (pago_id,))
+            venta_id = cur.fetchone()['venta_id']
+            conn.commit()
+            cls.recalcular_saldos_venta(venta_id)
+            return True, "Cuota actualizada correctamente."
+        except Exception as e:
+            if conn: conn.rollback()
+            return False, f"Error al editar cuota: {e}"
+        finally:
+            if conn: conn.close()
+
+    @classmethod
+    def anular_pago_detalle(cls, pago_id):
+        conn = Database.get_connection()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("UPDATE pagos SET estado='ANULADO' WHERE id=%s", (pago_id,))
+            cur.execute("SELECT venta_id FROM pagos WHERE id=%s", (pago_id,))
+            venta_id = cur.fetchone()['venta_id']
+            conn.commit()
+            cls.recalcular_saldos_venta(venta_id)
+            return True, "Cuota anulada/eliminada correctamente."
+        except Exception as e:
+            if conn: conn.rollback()
+            return False, f"Error al anular cuota: {e}"
+        finally:
+            if conn: conn.close()
+
+    @staticmethod
+    def eliminar_venta_fisica(id_venta):
+        # 🟢 BORRADO FÍSICO ABSOLUTO (Solo Admin)
+        try:
+            conn = Database.get_connection()
+            cursor = conn.cursor()
+            
+            # 1. Obtenemos eventos afectados para devolver el stock
+            cursor.execute("SELECT evento_id FROM detalle_ventas WHERE venta_id = %s", (id_venta,))
+            eventos_afectados = cursor.fetchall()
+            
+            # 2. Eliminamos en cascada
+            cursor.execute("DELETE FROM pagos WHERE venta_id = %s", (id_venta,))
+            cursor.execute("DELETE FROM detalle_ventas WHERE venta_id = %s", (id_venta,))
+            cursor.execute("DELETE FROM ventas WHERE id = %s", (id_venta,))
+            
+            # 3. Recalculamos stock
+            for ev in eventos_afectados:
+                cursor.execute("""
+                    UPDATE eventos SET stock_vendido = (
+                        SELECT COUNT(*) FROM detalle_ventas dv JOIN ventas v ON dv.venta_id = v.id 
+                        WHERE dv.evento_id = %s AND v.estado != 'ANULADO'
+                    ) WHERE id = %s
+                """, (ev[0], ev[0]))
+                cursor.execute("UPDATE eventos SET estado = CASE WHEN stock_vendido >= stock_maximo AND stock_maximo > 0 THEN 'LLENO' ELSE 'ABIERTO' END WHERE id = %s", (ev[0],))
+                
+            conn.commit()
+            cursor.close(); conn.close()
+            return True, "🗑️ Venta Eliminada Físicamente de la Base de Datos."
+        except Exception as e: 
+            return False, f"Error al eliminar físicamente: {e}"      

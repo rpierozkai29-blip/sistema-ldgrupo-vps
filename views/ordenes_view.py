@@ -13,30 +13,54 @@ zona_peru = pytz.timezone('America/Lima')
 
 @st.dialog("🌍 Ubicación del Cliente")
 def modal_ubicacion():
-    pais = st.selectbox("País", VentaModel.get_lista_paises())
+    # 1. Obtenemos lo que el usuario ya tenía guardado en memoria
+    ubi_pais = st.session_state['form_data'].get('pais', 'Perú')
+    ubi_dep = st.session_state['form_data'].get('departamento', '')
+    ubi_prov = st.session_state['form_data'].get('provincia', '')
+    ubi_dist = st.session_state['form_data'].get('distrito', '')
+
+    # 2. Selector de País con memoria
+    paises = VentaModel.get_lista_paises()
+    idx_pais = paises.index(ubi_pais) if ubi_pais in paises else 0
+    pais_sel = st.selectbox("País", paises, index=idx_pais, key="sel_pais")
     
-    if pais == "Perú":
+    if pais_sel == "Perú":
         c1, c2, c3 = st.columns(3)
-        dep = c1.selectbox("Departamento", VentaModel.get_lista_departamentos())
-        prov = c2.selectbox("Provincia", VentaModel.get_provincias_por_dep(dep))
-        dist = c3.selectbox("Distrito", VentaModel.get_distritos_por_prov(prov))
+        
+        # 3. Selector de Departamento
+        deps = VentaModel.get_lista_departamentos()
+        idx_dep = deps.index(ubi_dep) if ubi_dep in deps else 0
+        dep_sel = c1.selectbox("Departamento", deps, index=idx_dep, key="sel_dep")
+        
+        # 4. Selector de Provincia (se filtra estricto según el departamento)
+        provs = VentaModel.get_provincias_por_dep(dep_sel)
+        # Si el usuario cambió de departamento, la provincia vieja ya no existe, esto fuerza el reseteo
+        idx_prov = provs.index(ubi_prov) if ubi_prov in provs else 0
+        prov_sel = c2.selectbox("Provincia", provs, index=idx_prov, key="sel_prov")
+        
+        # 5. Selector de Distrito (se filtra estricto según la provincia)
+        dists = VentaModel.get_distritos_por_prov(prov_sel)
+        idx_dist = dists.index(ubi_dist) if ubi_dist in dists else 0
+        dist_sel = c3.selectbox("Distrito", dists, index=idx_dist, key="sel_dist")
         
         if st.button("💾 Confirmar", type="primary", use_container_width=True):
-            st.session_state['form_data']['pais'] = pais
-            st.session_state['form_data']['departamento'] = dep
-            st.session_state['form_data']['provincia'] = prov
-            st.session_state['form_data']['distrito'] = dist
+            st.session_state['form_data']['pais'] = pais_sel
+            st.session_state['form_data']['departamento'] = dep_sel
+            st.session_state['form_data']['provincia'] = prov_sel
+            st.session_state['form_data']['distrito'] = dist_sel
             st.session_state['form_data']['ciudad_ext'] = ""
             st.rerun()
     else:
         st.info("Para extranjeros, escriba la ciudad, estado o región manualmente.")
-        ciudad = st.text_input("Ciudad / Región / Estado")
+        ciudad_ext = st.session_state['form_data'].get('ciudad_ext', '')
+        ciudad_sel = st.text_input("Ciudad / Región / Estado", value=ciudad_ext, key="sel_ciu")
+        
         if st.button("💾 Confirmar", type="primary", use_container_width=True):
-            st.session_state['form_data']['pais'] = pais
+            st.session_state['form_data']['pais'] = pais_sel
             st.session_state['form_data']['departamento'] = ""
             st.session_state['form_data']['provincia'] = ""
             st.session_state['form_data']['distrito'] = None
-            st.session_state['form_data']['ciudad_ext'] = ciudad
+            st.session_state['form_data']['ciudad_ext'] = ciudad_sel
             st.rerun()
 
 @st.dialog("➕ Registrar Nueva Cuota")
@@ -101,6 +125,28 @@ def registrar_cuota_dialog(id_venta, cliente, deuda_actual, total_venta, pagado_
                     st.error(msg)
             except Exception as e: 
                 st.error(f"Error: {e}")
+
+# 🟢 NUEVA FUNCIÓN DIALOG PARA EDITAR CUOTAS
+@st.dialog("✏️ Editar Cuota")
+def editar_cuota_dialog(pago_dict):
+    st.markdown(f"### Modificando Pago")
+    c1, c2 = st.columns(2)
+    
+    f_pago = pago_dict['fecha_pago'] if isinstance(pago_dict.get('fecha_pago'), (date, datetime)) else datetime.now(zona_peru).date()
+    n_fecha = c1.date_input("Fecha de Pago", value=f_pago)
+    n_monto = c2.number_input("Monto:", value=float(pago_dict.get('monto', 0.0)), step=10.0)
+    
+    c3, c4 = st.columns(2)
+    lista_metodos = VentaModel.get_cuentas()
+    metodo_actual = pago_dict.get('metodo_pago', 'Yape')
+    idx_m = lista_metodos.index(metodo_actual) if metodo_actual in lista_metodos else 0
+    n_metodo = c3.selectbox("Método", lista_metodos, index=idx_m)
+    n_op = c4.text_input("N° Operación", value=pago_dict.get('nro_operacion') or "")
+
+    if st.button("💾 Guardar Cambios de Cuota", type="primary", use_container_width=True):
+        ok, msg = VentasController.editar_pago(pago_dict['id'], n_monto, n_metodo, n_op, n_fecha)
+        if ok: st.success(msg); st.rerun()
+        else: st.error(msg)
 
 @st.dialog("🔐 Validar Pagos en Caja (Auditor/Admin)", width="large")
 def validar_pagos_admin_dialog(id_venta, cliente):
@@ -339,7 +385,7 @@ def show_ordenes(sub_menu="Registrar Venta"):
             
         f_asesor = c3.selectbox("Asesor", lista_filtro_asesores, index=idx_asesor_filtro, disabled=disable_asesor_filtro, key=f"ase_{key_suffix}")
 
-        if sub_menu in ["Ventas por Validar", "Ventas Validadas"]:
+        if sub_menu in ["Ventas por Validar", "Ventas Validadas", "Ventas Anuladas"]:
             f_curso = c4.selectbox("Evento / Curso", lista_cursos, key=f"cur_{key_suffix}")
             f_cliente, f_tipo, f_cuenta = "", "Todos", "Todos"
         else:
@@ -361,13 +407,22 @@ def show_ordenes(sub_menu="Registrar Venta"):
         if 'por_validar' not in df_hist.columns: df_hist['por_validar'] = 0.0
         if 'descuento' not in df_hist.columns: df_hist['descuento'] = 0.0
 
+        # Convertir a float para evitar TypeError
+        df_hist['monto'] = df_hist['monto'].astype(float)
+        df_hist['ingreso'] = df_hist['ingreso'].astype(float)
+        df_hist['por_validar'] = df_hist['por_validar'].astype(float)
+        df_hist['descuento'] = df_hist['descuento'].astype(float)
+
         df_hist['saldo'] = df_hist['monto'] - df_hist['ingreso'] - df_hist['por_validar']
         df_hist['saldo'] = df_hist['saldo'].apply(lambda x: max(0.0, x))
 
+        # 🟢 LÓGICA DE FILTRADO POR PESTAÑAS
         if sub_menu == "Ventas por Validar":
             df_hist = df_hist[~df_hist['estado'].isin(['PAGADO', 'ANULADO'])]
         elif sub_menu == "Ventas Validadas":
             df_hist = df_hist[df_hist['estado'].isin(['PAGADO', 'PARCIAL'])]
+        elif sub_menu == "Ventas Anuladas":
+            df_hist = df_hist[df_hist['estado'] == 'ANULADO']
         
         if f_curso != "Todos":
             nombre_curso_filtro = f_curso.split(" [")[0]
@@ -395,6 +450,10 @@ def show_ordenes(sub_menu="Registrar Venta"):
                     df_hoy = df_hoy[df_hoy['vendedor'] == usuario_actual]
 
                 if not df_hoy.empty:
+                    df_hoy['monto'] = df_hoy.get('monto', 0.0).astype(float)
+                    df_hoy['ingreso'] = df_hoy.get('ingreso', 0.0).astype(float)
+                    df_hoy['por_validar'] = df_hoy.get('por_validar', 0.0).astype(float)
+
                     df_hoy_g = df_hoy.groupby('id', as_index=False).agg({'monto': 'first', 'saldo': 'first', 'estado': 'first', 'ingreso': 'first', 'por_validar':'first'})
                     df_hoy_g['saldo_real'] = df_hoy_g['monto'] - df_hoy_g['ingreso'] - df_hoy_g['por_validar']
                     df_hoy_g['saldo_real'] = df_hoy_g['saldo_real'].apply(lambda x: max(0.0, x))
@@ -432,6 +491,13 @@ def show_ordenes(sub_menu="Registrar Venta"):
             val_total = round(float(df_show['monto'].sum()), 2) if not df_show.empty else 0.0
             k1.metric("VENTAS VALIDADAS", val_cnt)
             k2.metric("DINERO VALIDADO", f"S/ {val_total:,.2f}")
+            
+        elif sub_menu == "Ventas Anuladas":
+            k1, k2 = st.columns(2)
+            val_cnt = len(df_show) if not df_show.empty else 0
+            val_perdida = round(float(df_show['monto'].sum()), 2) if not df_show.empty else 0.0
+            k1.metric("VENTAS ANULADAS TOTALES", val_cnt)
+            k2.metric("DINERO PERDIDO (Aprox)", f"S/ {val_perdida:,.2f}")
 
     # --- FORMULARIO DE REGISTRO MULTI-CURSO ---
     if sub_menu == "Registrar Venta" or st.session_state['is_editing']:
@@ -574,7 +640,6 @@ def show_ordenes(sub_menu="Registrar Venta"):
                     else: 
                         st.metric("Saldo Pendiente", f"S/ {saldo_calc:.2f}", delta="⚠️ Por Validar", delta_color="off")
                 
-                # 🟢 AÑADIMOS EL ORIGEN COMO UNA 5TA COLUMNA DINÁMICA
                 c_pag1, c_pag2, c_pag3, c_pag4, c_pag5 = st.columns(5)
                 
                 t_val_v = st.session_state['form_data'].get("tipo")
@@ -682,16 +747,18 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                 try:
                                     conn = Database.get_connection(); cur = conn.cursor()
                                     cur.execute("SELECT id FROM clientes WHERE dni_ruc = %s", (dni_input,)); res_c = cur.fetchone()
-                                    if res_c: id_cliente = res_c[0]
+                                    if res_c: 
+                                        id_cliente = res_c[0]
                                     else: 
-                                        cur.execute("INSERT INTO clientes (dni_ruc, nombre_completo, celular, email, distrito_id, fecha_registro) VALUES (%s, %s, %s, %s, %s, NOW())", (dni_input, nom_input, cel_input, email_input, dist_id))
+                                        cur.execute("INSERT INTO clientes (dni_ruc, nombre_completo, celular, email, distrito_id, pais, ciudad_extranjera, fecha_registro) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())", (dni_input, nom_input, cel_input, email_input, dist_id, pais_input, ciudad_ext_input))
                                         id_cliente = cur.lastrowid
                                         conn.commit()
                                     conn.close()
-                                except: st.error("Error al registrar el cliente en BD"); st.stop()
+                                except Exception as e: 
+                                    st.error(f"🔴 Error SQL al registrar cliente: {e}")
+                                    st.stop()
                                 
                                 estado_calculado = 'PENDIENTE'
-                                # 🟢 SE PASA ORIGEN INPUT COMO PARAMETRO EXTRA
                                 ok, msg = VentaModel.registrar_venta_completa(id_cliente, id_usuario_final, total_calc, saldo_calc, estado_calculado, tipo_input, origen_input, items_venta, acuenta_input, cuenta_input, op_input, obs_input, fecha_v_input, dscto_input, fecha_r_input)
                                 if ok: 
                                     st.success("✅ ¡Venta Registrada!")
@@ -699,7 +766,7 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                     st.session_state['form_key_counter'] += 1
                                     st.rerun()
                                 else: st.error(msg)
-                        except Exception as e: st.error(f"Error interno: {e}")
+                        except Exception as e: st.error(f"Error interno general: {e}")
 
     # --- TABLAS Y RESULTADOS ---
     if not df_show.empty:
@@ -713,7 +780,7 @@ def show_ordenes(sub_menu="Registrar Venta"):
         df_display['F. Venta'] = pd.to_datetime(df_display['F. Venta'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
         df_display['F. Reg'] = pd.to_datetime(df_display['F. Reg'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
 
-        if sub_menu in ["Ventas por Validar", "Ventas Validadas"]:
+        if sub_menu in ["Ventas por Validar", "Ventas Validadas", "Ventas Anuladas"]:
             col_ratios = [0.5, 1.2, 1, 1, 2, 2, 0.8, 0.8, 0.8, 0.8, 0.8, 1, 0.8, 1.2]
             h = st.columns(col_ratios)
             headers = ["ID", "Vendedor", "F. Venta", "Doc", "Nombre Completo", "Cursos", "Cierre", "Venta", "A Cuenta", "P. Validar", "Saldo", "Método", "Estado", "Acción"]
@@ -740,6 +807,12 @@ def show_ordenes(sub_menu="Registrar Venta"):
                     if sub_menu == "Ventas por Validar":
                         if st.button("Validar Pagos", key=f"btn_val_{row['ID']}", type="secondary", use_container_width=True):
                             validar_pagos_admin_dialog(int(row['ID']), row['Nombre'])
+                    elif sub_menu == "Ventas Anuladas" and rol_actual == 'admin':
+                        # 🟢 ELIMINAR FÍSICAMENTE (Solo Administrador)
+                        if st.button("Eliminar", key=f"btn_del_fis_{row['ID']}", type="primary", use_container_width=True):
+                            ok, msg = VentasController.eliminar_venta_fisica(int(row['ID']))
+                            if ok: st.success(msg); st.rerun()
+                            else: st.error(msg)
                     else: st.write("✅ OK")
                 st.markdown("<div style='border-bottom: 1px solid #e0e0e0; margin-bottom: 5px;'></div>", unsafe_allow_html=True)
 
@@ -757,15 +830,37 @@ def show_ordenes(sub_menu="Registrar Venta"):
                 estado_sel = str(sel.get("Estado", "")).upper()
                 
                 st.markdown(f"### 💳 Historial de Pagos - Venta #{id_sel}")
-                historial_pagos = VentaModel.get_historial_pagos(id_sel)
+                pagos = VentaModel.get_historial_pagos(id_sel)
                 
-                if historial_pagos:
-                    df_pagos = pd.DataFrame(historial_pagos)
-                    df_pagos_fmt = df_pagos.rename(columns={
-                        'fecha_pago': '📅 Fecha', 'monto': '💰 Monto', 'metodo_pago': '🏦 Método',
-                        'nro_operacion': '🔢 Op.', 'estado': '✅ Estado', 'registrado_por': '👤 Recibido por'
-                    })
-                    st.dataframe(df_pagos_fmt, use_container_width=True, hide_index=True, column_config={"💰 Monto": st.column_config.NumberColumn(format="S/ %.2f"), "📅 Fecha": st.column_config.DatetimeColumn(format="DD/MM/YYYY")})
+                if pagos:
+                    h1, h_pago, h2, h3, h4, h5, h6 = st.columns([1.5, 1.2, 1.5, 1.5, 2, 1.5, 1])
+                    h1.markdown("**Fecha**"); h_pago.markdown("**Pago**"); h2.markdown("**Monto**"); h3.markdown("**Método**"); h4.markdown("**N° Op**"); h5.markdown("**Estado**"); h6.markdown("**Acción**")
+                    st.markdown("---")
+                    
+                    for idx_p, p in enumerate(pagos):
+                        if p.get('estado') == 'ANULADO': continue
+                        c1, c_pago, c2, c3, c4, c5, c6 = st.columns([1.5, 1.2, 1.5, 1.5, 2, 1.5, 1], vertical_alignment="center")
+                        c1.write(p['fecha_pago'].strftime("%d/%m/%Y") if isinstance(p.get('fecha_pago'), (datetime, date)) else str(p.get('fecha_pago', '')))
+                        c_pago.write(f"Pago {len(pagos) - idx_p}") 
+                        c2.write(f"S/ {float(p.get('monto', 0)):.2f}")
+                        c3.write(p.get('metodo_pago', '-'))
+                        c4.write(p.get('nro_operacion') or '-')
+                        c5.write(str(p.get('estado', '')).upper())
+                        
+                        with c6:
+                            # 🟢 PERMISO DE EDICIÓN: Vendedor solo si está Pendiente. Admin/Auditor en todo momento.
+                            puedo_editar = (p['estado'] == 'PENDIENTE') or (rol_actual in ['admin', 'auditor'])
+                            # 🟢 PERMISO DE ELIMINAR CUOTA: Solo el Admin.
+                            puedo_eliminar = (rol_actual == 'admin')
+                            
+                            c_btn1, c_btn2 = st.columns(2)
+                            if puedo_editar:
+                                if c_btn1.button("✏️", key=f"edit_p_{p['id']}", help="Editar Cuota"): editar_cuota_dialog(p)
+                            if puedo_eliminar:
+                                if c_btn2.button("🗑️", key=f"del_p_{p['id']}", help="Anular Cuota"):
+                                    ok, msg = VentasController.anular_pago(p['id'])
+                                    if ok: st.success("Anulado"); st.rerun()
+                        st.markdown("<div style='border-bottom: 1px solid #f0f2f6; margin-bottom: 5px;'></div>", unsafe_allow_html=True)
                 else:
                     st.info("No se encontraron registros detallados de pagos para esta venta.")
                 
@@ -804,8 +899,8 @@ def show_ordenes(sub_menu="Registrar Venta"):
                             precio_base_catalogo = sum([mapa_eventos[c]['precio'] for c in curso_display_matches if c in mapa_eventos])
 
                             op_inicial = ""
-                            if historial_pagos:
-                                op_inicial = str(historial_pagos[-1].get('nro_operacion') or "")
+                            if pagos:
+                                op_inicial = str(pagos[-1].get('nro_operacion') or "")
 
                             st.session_state['form_data'].update({
                                 "fecha_venta": row_first.get("fecha_venta", fecha_actual.date()),
@@ -823,7 +918,7 @@ def show_ordenes(sub_menu="Registrar Venta"):
                                 "dscto": float(row_first.get("descuento", 0.0)),
                                 "a_cuenta": float(row_first.get("ingreso", 0.0)) + float(row_first.get("por_validar", 0.0)),
                                 "tipo": row_first.get("tipo_venta", None),
-                                "origen": row_first.get("origen", None), # 🟢 SE RECUPERA EL ORIGEN AL EDITAR
+                                "origen": row_first.get("origen", None),
                                 "cuenta": row_first.get("cuenta", None),
                                 "vendedor": row_first.get("vendedor", None),
                                 "nota": row_first.get("observacion", "") if pd.notna(row_first.get("observacion")) else "",
@@ -832,7 +927,9 @@ def show_ordenes(sub_menu="Registrar Venta"):
                             st.session_state['form_key_counter'] += 1
                         st.rerun()
                         
-                    if c2.button(f"🗑️ ELIMINAR #{id_sel}", type="primary", use_container_width=True):
-                        VentasController.eliminar_venta(id_sel); st.rerun()
+                    if rol_actual in ['admin', 'coordinador']:
+                        if c2.button(f"🚫 ANULAR VENTA #{id_sel}", type="primary", use_container_width=True):
+                            VentasController.eliminar_venta(id_sel); st.rerun()
+
     else:
         st.info(f"No hay registros en '{sub_menu}' con los filtros actuales.")

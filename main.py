@@ -6,8 +6,6 @@ from views import ordenes_view, reportes_view, login_view, mantenimiento_view, r
 
 st.set_page_config(page_title="Sistema LD GRUPO", layout="wide", initial_sidebar_state="expanded")
 
-# FUNCIÓN CSS DINÁMICO Y ESTILOS GLOBALES
-
 def set_background(image_path, opacity=0.92):
     css_fondo = ""
     if os.path.exists(image_path):
@@ -52,7 +50,7 @@ def main():
         usuario_nombre = st.session_state.get('usuario', 'Usuario')
 
         with st.sidebar:
-            st.title("Sistema LD") # 🟢 Actualizado
+            st.title("Sistema LD") 
             st.write(f"Hola, **{usuario_nombre}**")
             st.caption(f"Rol: {rol_usuario.capitalize()}")
             
@@ -64,6 +62,7 @@ def main():
             if rol_usuario in ['admin', 'auditor']:
                 ventas_subs.append(sac.MenuItem('Ventas por Validar', icon='hourglass-split'))
                 ventas_subs.append(sac.MenuItem('Ventas Validadas', icon='check-circle-fill'))
+                ventas_subs.append(sac.MenuItem('Ventas Anuladas', icon='x-octagon')) # 🟢 NUEVO MENÚ
             menu_items.append(sac.MenuItem('Ventas', icon='cart', children=ventas_subs))
 
             # --- MENÚ REPORTES BI ---
@@ -72,10 +71,8 @@ def main():
                 sac.MenuItem('Gráficos BI', icon='pie-chart'),
             ]))
 
-            # --- CENTRO DE REPORTES (PARA TODOS, PERO DINÁMICO) ---
+            # --- CENTRO DE REPORTES ---
             reportes_subs = [sac.MenuItem('Reporte Diario', icon='calendar-check')] 
-            
-            # Roles gerenciales ven todo
             if rol_usuario in ['admin', 'auditor', 'coordinador']:
                 reportes_subs.extend([
                     sac.MenuItem('Detalle General Ventas', icon='table'),
@@ -83,7 +80,6 @@ def main():
                     sac.MenuItem('Lista de Participantes', icon='people'),
                     sac.MenuItem('Historial de Cliente', icon='person-badge')
                 ])
-            # Vendedores solo ven Cuentas por Cobrar además del Reporte Diario
             elif rol_usuario == 'vendedor':
                 reportes_subs.append(sac.MenuItem('Cuentas por Cobrar', icon='exclamation-circle'))
                 
@@ -96,7 +92,7 @@ def main():
                     sac.MenuItem('Registro de Usuario', icon='person-plus'),
                     sac.MenuItem('Registro de Cursos', icon='book'),      
                     sac.MenuItem('Registro de Periodos', icon='clock'),
-                    sac.MenuItem('Parámetros de Venta', icon='tags'), # 🟢 AQUÍ ESTÁ EL NUEVO MENÚ (Tipos y Orígenes)
+                    sac.MenuItem('Parámetros de Venta', icon='tags'), 
                 ]))
             elif rol_usuario == 'coordinador':
                 menu_items.append(sac.MenuItem('Mantenimiento', icon='gear', children=[
@@ -136,7 +132,8 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
 
-        elif selected in ['Registrar Venta', 'Ventas por Validar', 'Ventas Validadas']:
+        # 🟢 RUTEADOR ACTUALIZADO PARA VENTAS ANULADAS
+        elif selected in ['Registrar Venta', 'Ventas por Validar', 'Ventas Validadas', 'Ventas Anuladas']:
             if selected == 'Registrar Venta' or rol_usuario in ['admin', 'auditor']:
                 ordenes_view.show_ordenes(selected)
             else: st.error("Acceso denegado.")
@@ -144,7 +141,6 @@ def main():
         elif selected in ['Dashboard', 'Gráficos BI']:
             reportes_view.show_reportes(selected)
             
-        # --- RUTEADOR DEL CENTRO DE REPORTES ---
         elif selected == 'Reporte Diario':
             reporte_diario_view.show_reporte_diario()
             
@@ -163,7 +159,6 @@ def main():
                 mantenimiento_view.show_mantenimiento(selected)
             else: st.error("Acceso denegado. Solo Administradores o Coordinadores.")
             
-        # 🟢 SE AGREGÓ "Parámetros de Venta" PARA QUE RUTEE CORRECTAMENTE A LA VISTA
         elif selected in ['Registro de Usuario', 'Parámetros de Venta']:
             if rol_usuario == 'admin':
                 mantenimiento_view.show_mantenimiento(selected)

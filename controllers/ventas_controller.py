@@ -46,4 +46,20 @@ class VentasController:
     
     @staticmethod
     def eliminar_venta(venta_id):
+        # Borrado Lógico (Anulación)
         return VentaModel.eliminar_venta(venta_id)
+    
+    @staticmethod
+    def eliminar_venta_fisica(id_venta):
+        # Borrado definitivo de la BD (Solo Admin)
+        return VentaModel.eliminar_venta_fisica(id_venta)
+
+    @staticmethod
+    def editar_pago(pago_id, monto, metodo, operacion, fecha_pago):
+        # Editar una cuota específica
+        return VentaModel.editar_pago_detalle(pago_id, monto, metodo, operacion, fecha_pago)
+        
+    @staticmethod
+    def anular_pago(pago_id):
+        # Anular una cuota específica (Solo Admin)
+        return VentaModel.anular_pago_detalle(pago_id)
